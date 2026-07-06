@@ -74,6 +74,23 @@
             border-radius: 0 0 var(--radius-lg) var(--radius-lg);
             box-shadow: var(--shadow-lg);
             margin-bottom: 30px;
+            position: relative;
+        }
+
+        .settings-link {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 1.5rem;
+            text-decoration: none;
+            opacity: 0.8;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+
+        .settings-link:hover {
+            opacity: 1;
+            transform: rotate(30deg);
         }
 
         .header h1 {
@@ -543,6 +560,7 @@
 <body>
     <!-- 标题区域 -->
     <header class="header">
+        <a href="settings.html" class="settings-link" title="AI配置">⚙️</a>
         <h1>AI申论老师</h1>
         <p>免费、透明、随练随改的AI批改老师</p>
     </header>
@@ -734,10 +752,29 @@
 
            ============================================ */
 
-        // API配置 - 请根据您使用的AI服务修改
-        const API_ENDPOINT = "https://tokenhub.tencentmaas.com/v1/chat/completions"; // 替换为您的API端点
-        const API_KEY = "sk-bSYgXYhVwWDoPkesSpakp05wpZKHsFBjCGXpiWVxU40etYL0"; // 替换为您的API密钥
-        const MODEL_NAME = "hy3"; // 替换为您使用的模型名称
+        // 默认API配置
+        const DEFAULT_CONFIG = {
+            apiEndpoint: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
+            apiKey: 'sk-bSYgXYhVwWDoPkesSpakp05wpZKHsFBjCGXpiWVxU40etYL0',
+            modelName: 'hy3'
+        };
+
+        function loadConfig() {
+            const saved = localStorage.getItem('shenlun_config');
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    return DEFAULT_CONFIG;
+                }
+            }
+            return DEFAULT_CONFIG;
+        }
+
+        const CONFIG = loadConfig();
+        const API_ENDPOINT = CONFIG.apiEndpoint;
+        const API_KEY = CONFIG.apiKey;
+        const MODEL_NAME = CONFIG.modelName;
 
         // 系统提示词 - 严格按要求设置
         const SYSTEM_PROMPT = `请严格按照以下角色、规则和格式，作为我的申论阅卷老师，为我的答案评分。
@@ -1728,10 +1765,6 @@ ${answer}`;
                 }
 
                 const standardPoints = [];
-                const scorePointsDetail = [];
-                const lossPointsDetail = [];
-                let baseScore = Math.floor(maxScore * 0.6);
-
                 if (questionText.includes('概括') || questionText.includes('归纳')) {
                     standardPoints.push(
                         '制度建设方面：完善相关制度机制，强化顶层设计，为工作开展提供制度保障',
@@ -1770,8 +1803,13 @@ ${answer}`;
                     );
                 }
 
-                const pointsPerItem = maxScore / standardPoints.length;
-                let hitCount = 0;
+                const pointsPerItem = Math.floor(maxScore / standardPoints.length);
+                const remainder = maxScore % standardPoints.length;
+                
+                const scorePointsDetail = [];
+                const lossPointsDetail = [];
+                let totalScore = 0;
+                let totalDeduct = 0;
 
                 standardPoints.forEach((point, index) => {
                     const pointWords = point.replace(/[：:，,。.、（）()\s]/g, '');
@@ -1780,64 +1818,71 @@ ${answer}`;
                         const bigram = pointWords.substring(i, i + 2);
                         if (answer.includes(bigram)) {
                             hit = true;
-                            hitCount++;
                             break;
                         }
                     }
+                    const scoreForPoint = pointsPerItem + (index < remainder ? 1 : 0);
                     if (hit) {
-                        const scoreForPoint = Math.floor(pointsPerItem * (0.7 + Math.random() * 0.3));
                         scorePointsDetail.push(`您答案中的相关表述对应标准要点中的要点${index + 1}，表述基本准确，得${scoreForPoint}分。`);
-                        baseScore += Math.floor(pointsPerItem * 0.3);
+                        totalScore += scoreForPoint;
                     } else {
-                        lossPointsDetail.push(`遗漏要点：您未提及"${point.substring(0, 20)}..."，扣${Math.floor(pointsPerItem)}分。`);
+                        lossPointsDetail.push(`遗漏要点：您未提及"${point.substring(0, 20)}..."，扣${scoreForPoint}分。`);
+                        totalDeduct += scoreForPoint;
                     }
                 });
 
-                if (wordLimitType === 'max') {
-                    if (answerLength > wordMax) {
-                        const over = answerLength - wordMax;
-                        const deduct = Math.ceil(maxScore * 0.1);
-                        lossPointsDetail.push(`超字数：超出${wordLimitText}要求${over}字，扣${deduct}分。`);
-                        baseScore -= deduct;
-                    } else if (answerLength < wordMax * 0.5 && answerLength > 0) {
-                        const deduct = Math.floor(maxScore * 0.1);
-                        lossPointsDetail.push(`字数不足：内容过于单薄，要点展开不够，扣${deduct}分。`);
-                        baseScore -= deduct;
-                    }
-                } else if (wordLimitType === 'min') {
-                    if (answerLength < wordMin && answerLength > 0) {
-                        const under = wordMin - answerLength;
-                        const deduct = Math.ceil(maxScore * 0.15);
-                        lossPointsDetail.push(`字数不足：未达到${wordLimitText}要求，少${under}字，扣${deduct}分。`);
-                        baseScore -= deduct;
-                    }
-                } else if (wordLimitType === 'range') {
-                    if (answerLength > wordMax) {
-                        const over = answerLength - wordMax;
-                        const deduct = Math.ceil(maxScore * 0.1);
-                        lossPointsDetail.push(`超字数：超出字数上限${over}字，扣${deduct}分。`);
-                        baseScore -= deduct;
-                    } else if (answerLength < wordMin) {
-                        const under = wordMin - answerLength;
-                        const deduct = Math.ceil(maxScore * 0.1);
-                        lossPointsDetail.push(`字数不足：未达字数下限${under}字，扣${deduct}分。`);
-                        baseScore -= deduct;
-                    }
-                }
-
                 if (answerLength > 0) {
+                    if (wordLimitType === 'max') {
+                        if (answerLength > wordMax) {
+                            const deduct = Math.min(Math.ceil(maxScore * 0.1), maxScore - totalScore);
+                            if (deduct > 0) {
+                                lossPointsDetail.push(`超字数：超出${wordLimitText}要求，扣${deduct}分。`);
+                                totalDeduct += deduct;
+                            }
+                        } else if (answerLength < wordMax * 0.5) {
+                            const deduct = Math.min(Math.floor(maxScore * 0.1), maxScore - totalScore);
+                            if (deduct > 0) {
+                                lossPointsDetail.push(`字数不足：内容过于单薄，扣${deduct}分。`);
+                                totalDeduct += deduct;
+                            }
+                        }
+                    } else if (wordLimitType === 'min') {
+                        if (answerLength < wordMin) {
+                            const deduct = Math.min(Math.ceil(maxScore * 0.15), maxScore - totalScore);
+                            if (deduct > 0) {
+                                lossPointsDetail.push(`字数不足：未达到${wordLimitText}要求，扣${deduct}分。`);
+                                totalDeduct += deduct;
+                            }
+                        }
+                    } else if (wordLimitType === 'range') {
+                        if (answerLength > wordMax) {
+                            const deduct = Math.min(Math.ceil(maxScore * 0.1), maxScore - totalScore);
+                            if (deduct > 0) {
+                                lossPointsDetail.push(`超字数：超出字数上限，扣${deduct}分。`);
+                                totalDeduct += deduct;
+                            }
+                        } else if (answerLength < wordMin) {
+                            const deduct = Math.min(Math.ceil(maxScore * 0.1), maxScore - totalScore);
+                            if (deduct > 0) {
+                                lossPointsDetail.push(`字数不足：未达字数下限，扣${deduct}分。`);
+                                totalDeduct += deduct;
+                            }
+                        }
+                    }
+
                     const paragraphs = answer.split(/\n\s*\n/).filter(p => p.trim().length > 0);
                     if (paragraphs.length >= 2) {
                         scorePointsDetail.push('结构清晰：答案有明确的段落划分，层次分明。');
-                        baseScore += Math.floor(maxScore * 0.03);
                     } else if (answerLength > 50) {
-                        lossPointsDetail.push('逻辑不清：缺乏段落层次，建议分段作答，扣2分。');
-                        baseScore -= 2;
+                        const deduct = Math.min(2, maxScore - totalScore);
+                        if (deduct > 0) {
+                            lossPointsDetail.push(`逻辑不清：缺乏段落层次，建议分段作答，扣${deduct}分。`);
+                            totalDeduct += deduct;
+                        }
                     }
 
                     if (/[一二三四五六七八九十\d]+[、.．)）]/.test(answer) || /^[①②③④⑤⑥⑦⑧⑨⑩]/.test(answer)) {
                         scorePointsDetail.push('条理清晰：使用了分点作答，要点明确。');
-                        baseScore += Math.floor(maxScore * 0.03);
                     }
 
                     const keywords = ['措施', '对策', '建议', '原因', '影响', '意义', '问题', '经验', '做法', '举措', '理念', '观点', '分析', '概括', '总结'];
@@ -1847,22 +1892,20 @@ ${answer}`;
                     });
                     if (keywordCount >= 3) {
                         scorePointsDetail.push('表述规范：使用了申论常用术语，表达较为专业。');
-                        baseScore += Math.floor(maxScore * 0.03);
-                    } else if (keywordCount === 0 && answerLength > 50) {
-                        lossPointsDetail.push('表述不当：建议使用申论规范表述，提升答案专业性。');
                     }
                 }
 
                 if (answerLength === 0) {
-                    baseScore = 0;
+                    totalScore = 0;
+                    totalDeduct = maxScore;
                     lossPointsDetail.push('答案为空，未作答。');
                 }
 
-                let finalScoreNum = Math.max(0, Math.min(maxScore, baseScore));
+                let finalScoreNum = Math.max(0, maxScore - totalDeduct);
 
                 if (answerLength > 0 && answerLength < 20) {
                     finalScoreNum = Math.floor(maxScore * 0.2);
-                    lossPointsDetail.push('答案过于简短，未能充分展开论述。');
+                    totalDeduct = maxScore - finalScoreNum;
                 }
 
                 const scorePercent = finalScoreNum / maxScore;
@@ -1935,16 +1978,47 @@ ${answer}`;
 
         // 展示结果
         function displayResult(result, maxScore) {
-            document.getElementById('finalScore').textContent = result.final_score || `--/${maxScore}`;
-            document.getElementById('overallReview').textContent = result.overall_review || '暂无';
+            const validatedResult = validateScoreConsistency(result, maxScore);
+            
+            document.getElementById('finalScore').textContent = validatedResult.final_score || `--/${maxScore}`;
+            document.getElementById('overallReview').textContent = validatedResult.overall_review || '暂无';
 
-            renderStandardAnswer('standardAnswer', result.standard_answer || '暂无');
-            renderList('scorePointsDetail', result.score_points_detail || []);
-            renderList('lossPointsDetail', result.loss_points_detail || []);
-            renderList('improvementSuggestions', result.improvement_suggestions || []);
+            renderStandardAnswer('standardAnswer', validatedResult.standard_answer || '暂无');
+            renderList('scorePointsDetail', validatedResult.score_points_detail || []);
+            renderList('lossPointsDetail', validatedResult.loss_points_detail || []);
+            renderList('improvementSuggestions', validatedResult.improvement_suggestions || []);
 
             resultSection.classList.add('visible');
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 校验分数一致性
+        function validateScoreConsistency(result, maxScore) {
+            const scoreDetail = result.score_points_detail || [];
+            const lossDetail = result.loss_points_detail || [];
+            
+            const scoreMatch = result.final_score ? result.final_score.match(/(\d+)/) : null;
+            let finalScore = scoreMatch ? parseInt(scoreMatch[1]) : 0;
+
+            let totalScore = 0;
+            scoreDetail.forEach(item => {
+                const match = item.match(/得(\d+)分/);
+                if (match) totalScore += parseInt(match[1]);
+            });
+
+            let totalDeduct = 0;
+            lossDetail.forEach(item => {
+                const match = item.match(/扣(\d+)分/);
+                if (match) totalDeduct += parseInt(match[1]);
+            });
+
+            const expectedFinal = maxScore - totalDeduct;
+            if (expectedFinal !== finalScore) {
+                finalScore = expectedFinal;
+                result.final_score = `${Math.max(0, Math.min(maxScore, finalScore))}/${maxScore}`;
+            }
+
+            return result;
         }
 
         // 渲染标准答案

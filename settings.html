@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI配置 - AI申论老师</title>
+    <style>
+        :root {
+            --primary-color: #1a73e8;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --bg-color: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --border-color: #e0e0e0;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --text-light: #80868b;
+            --success-color: #34a853;
+            --error-color: #ea4335;
+            --warning-color: #fbbc04;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.1);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 20px rgba(0,0,0,0.15);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: white;
+            text-decoration: none;
+            margin-bottom: 16px;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+        }
+
+        .card {
+            background: var(--bg-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: var(--primary-color);
+            border-radius: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .form-hint {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-top: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 1rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.2);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-light);
+            border-color: var(--primary-color);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #2d9249;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+            justify-content: center;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: var(--success-color);
+            color: white;
+            padding: 12px 24px;
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-lg);
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.error {
+            background: var(--error-color);
+        }
+
+        .test-status {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .test-status.success {
+            display: block;
+            background: #e6f4ea;
+            color: var(--success-color);
+        }
+
+        .test-status.error {
+            display: block;
+            background: #fce8e6;
+            color: var(--error-color);
+        }
+
+        .test-status.loading {
+            display: block;
+            background: var(--primary-light);
+            color: var(--primary-color);
+        }
+
+        .password-toggle {
+            position: relative;
+        }
+
+        .password-toggle .form-input {
+            padding-right: 44px;
+        }
+
+        .toggle-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-light);
+            font-size: 1.1rem;
+            padding: 4px 8px;
+        }
+
+        .toggle-btn:hover {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="index.html" class="back-link">← 返回首页</a>
+            <h1>⚙️ AI配置</h1>
+            <p>配置您的AI模型参数</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">模型配置</div>
+
+            <div class="form-group">
+                <label class="form-label">API 接口地址</label>
+                <input type="text" class="form-input" id="apiEndpoint" placeholder="https://api.example.com/v1/chat/completions">
+                <div class="form-hint">OpenAI 兼容格式的接口地址</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">API Key</label>
+                <div class="password-toggle">
+                    <input type="password" class="form-input" id="apiKey" placeholder="sk-xxxxxxxxxxxxxxxx">
+                    <button type="button" class="toggle-btn" id="toggleKey" onclick="toggleKeyVisibility()">👁</button>
+                </div>
+                <div class="form-hint">您的API密钥，仅保存在本地浏览器中</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">模型名称</label>
+                <input type="text" class="form-input" id="modelName" placeholder="gpt-4o / claude-3-opus / qwen-plus 等">
+                <div class="form-hint">要使用的模型ID</div>
+            </div>
+
+            <div id="testStatus" class="test-status"></div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="testConnection()">🔌 测试连接</button>
+                <button class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">当前状态</div>
+            <div style="line-height: 2;">
+                <p><strong>配置状态：</strong><span id="configStatus">未配置</span></p>
+                <p><strong>接口地址：</strong><span id="endpointDisplay">-</span></p>
+                <p><strong>模型名称：</strong><span id="modelDisplay">-</span></p>
+            </div>
+            <div class="btn-group" style="margin-top: 16px;">
+                <button class="btn btn-secondary" onclick="resetConfig()" style="flex: 1; justify-content: center;">🔄 恢复默认配置</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const DEFAULT_CONFIG = {
+            apiEndpoint: 'https://tokenhub.tencentmaas.com/v1/chat/completions',
+            apiKey: 'sk-bSYgXYhVwWDoPkesSpakp05wpZKHsFBjCGXpiWVxU40etYL0',
+            modelName: 'hy3'
+        };
+
+        function loadConfig() {
+            const saved = localStorage.getItem('shenlun_config');
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    return DEFAULT_CONFIG;
+                }
+            }
+            return DEFAULT_CONFIG;
+        }
+
+        function saveToStorage(config) {
+            localStorage.setItem('shenlun_config', JSON.stringify(config));
+        }
+
+        function initPage() {
+            const config = loadConfig();
+            document.getElementById('apiEndpoint').value = config.apiEndpoint || '';
+            document.getElementById('apiKey').value = config.apiKey || '';
+            document.getElementById('modelName').value = config.modelName || '';
+
+            updateStatus(config);
+        }
+
+        function updateStatus(config) {
+            const statusEl = document.getElementById('configStatus');
+            const endpointEl = document.getElementById('endpointDisplay');
+            const modelEl = document.getElementById('modelDisplay');
+
+            if (config.apiKey && config.apiKey !== 'YOUR_API_KEY') {
+                statusEl.innerHTML = '<span style="color: var(--success-color);">✓ 已配置</span>';
+            } else {
+                statusEl.innerHTML = '<span style="color: var(--warning-color);">⚠ 未配置</span>';
+            }
+
+            endpointEl.textContent = config.apiEndpoint ? maskEndpoint(config.apiEndpoint) : '-';
+            modelEl.textContent = config.modelName || '-';
+        }
+
+        function maskEndpoint(url) {
+            try {
+                const u = new URL(url);
+                return u.hostname;
+            } catch {
+                return url.substring(0, 30) + '...';
+            }
+        }
+
+        function saveConfig() {
+            const apiEndpoint = document.getElementById('apiEndpoint').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const modelName = document.getElementById('modelName').value.trim();
+
+            if (!apiEndpoint) {
+                showToast('请输入API接口地址', 'error');
+                return;
+            }
+            if (!apiKey) {
+                showToast('请输入API Key', 'error');
+                return;
+            }
+            if (!modelName) {
+                showToast('请输入模型名称', 'error');
+                return;
+            }
+
+            const config = { apiEndpoint, apiKey, modelName };
+            saveToStorage(config);
+            updateStatus(config);
+            showToast('配置保存成功！');
+        }
+
+        function resetConfig() {
+            if (confirm('确定要恢复默认配置吗？')) {
+                document.getElementById('apiEndpoint').value = DEFAULT_CONFIG.apiEndpoint;
+                document.getElementById('apiKey').value = DEFAULT_CONFIG.apiKey;
+                document.getElementById('modelName').value = DEFAULT_CONFIG.modelName;
+                saveToStorage(DEFAULT_CONFIG);
+                updateStatus(DEFAULT_CONFIG);
+                showToast('已恢复默认配置');
+            }
+        }
+
+        async function testConnection() {
+            const apiEndpoint = document.getElementById('apiEndpoint').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const modelName = document.getElementById('modelName').value.trim();
+
+            if (!apiEndpoint || !apiKey || !modelName) {
+                showToast('请先填写完整配置', 'error');
+                return;
+            }
+
+            const statusEl = document.getElementById('testStatus');
+            statusEl.className = 'test-status loading';
+            statusEl.textContent = '⏳ 正在测试连接...';
+
+            try {
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: modelName,
+                        messages: [
+                            { role: 'user', content: '你好' }
+                        ],
+                        stream: false,
+                        max_tokens: 10
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    statusEl.className = 'test-status success';
+                    statusEl.textContent = `✓ 连接成功！模型返回：${data.choices?.[0]?.message?.content?.substring(0, 30) || 'OK'}`;
+                } else {
+                    const errorText = await response.text();
+                    statusEl.className = 'test-status error';
+                    statusEl.textContent = `✗ 连接失败：${response.status} ${response.statusText}`;
+                }
+            } catch (error) {
+                statusEl.className = 'test-status error';
+                statusEl.textContent = `✗ 连接失败：${error.message}`;
+            }
+        }
+
+        function toggleKeyVisibility() {
+            const input = document.getElementById('apiKey');
+            const btn = document.getElementById('toggleKey');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁';
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2500);
+        }
+
+        initPage();
+    </script>
+</body>
+</html>
