@@ -813,7 +813,7 @@
 
 ### 3. 反馈内容
 *   **给出"标准答案参考"**：基于材料撰写一份完整的、符合题目要求的标准答案。**【关键约束】标准答案的总字数必须严格控制在题目字数要求范围内，不得超出任何字。例如题目要求不超过150字，则标准答案必须控制在150字以内。**
-*   **逐项对比评分**：将我的答案与"标准答案"中的核心要点逐条对比，明确指出：
+*   **逐项对比评分**：将我的答案与"标准答案"中的核心要点对比，明确指出：
     *   **得分点**：我答对了哪些要点，得几分。
     *   **失分点**：我遗漏了哪些要点，或有哪些明确的扣分原因。
 *   **最终得分**：计算并给出总分。
@@ -1874,122 +1874,34 @@ ${answer}`;
         }
 
         // 调用AI接口（直连，使用text/plain绕过CORS预检）
-        async function callAI(userMessage) {
-            // 检查是否配置了API
-            if (API_KEY === "YOUR_API_KEY" || !API_KEY) {
-                return getDemoResult(userMessage);
-            }
+       async function callAI(payload) {
+         const res = await fetch(config.apiEndpoint, {
+     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
 
-            console.log('=== AI请求调试信息 ===');
-            console.log('当前页面地址:', window.location.href);
-            console.log('API_ENDPOINT:', API_ENDPOINT);
-            console.log('MODEL_NAME:', MODEL_NAME);
-            console.log('API_KEY长度:', API_KEY ? API_KEY.length : 0);
-            console.log('请求体大小:', JSON.stringify({model: MODEL_NAME, messages: [{role: 'user', content: userMessage}]}).length, '字符');
-            console.log('========================');
+  if (!res.ok) {
+    throw new Error('API请求失败 (' + res.status + ')');
+  }
 
-            let timeoutId;
+  const wrapper = await res.json();
 
-            try {
-                const controller = new AbortController();
-                timeoutId = setTimeout(() => {
-                    controller.abort();
-                }, 120000);
+  // ✅ 关键修复：处理 SCF 函数 URL 默认响应模式的嵌套结构
+  let data;
+  if (wrapper.body && typeof wrapper.body === 'string') {
+    data = JSON.parse(wrapper.body);  // body 是字符串，需要再解析一次
+  } else {
+    data = wrapper;  // 已经是扁平结构就直接用
+  }
 
-                const response = await fetch(API_ENDPOINT, {
-                    method: 'POST',
-                    mode: 'cors',
-                    cache: 'no-cache',
-                    credentials: 'omit',
-                    headers: {
-                        'Content-Type': 'text/plain',
-                        'Authorization': `Bearer ${API_KEY}`,
-                        'Accept': 'application/json',
-                        'Origin': window.location.origin
-                    },
-                    body: JSON.stringify({
-                        model: MODEL_NAME,
-                        messages: [
-                            { role: 'system', content: SYSTEM_PROMPT },
-                            { role: 'user', content: userMessage }
-                        ],
-                        temperature: 0.7
-                    }),
-                    signal: controller.signal,
-                    referrerPolicy: 'no-referrer'
-                });
+if (!data.choices || !data.choices[0]) {
+    console.log('[DEBUG] 实际返回数据:', JSON.stringify(data));
+    throw new Error('AI未返回有效结果，实际数据: ' + JSON.stringify(data).slice(0, 500));
+  }
 
-                console.log('=== 响应信息 ===');
-                console.log('状态码:', response.status);
-                console.log('响应URL:', response.url);
-                console.log('响应头:', Object.fromEntries(response.headers));
-                console.log('================');
-
-                clearTimeout(timeoutId);
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error?.message || `API请求失败 (${response.status})`);
-                }
-
-                const data = await response.json();
-                const content = data.choices?.[0]?.message?.content;
-
-                if (!content) {
-                    throw new Error('AI未返回有效结果');
-                }
-
-                try {
-                    return JSON.parse(content);
-                } catch {
-                    const jsonMatch = content.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) {
-                        return JSON.parse(jsonMatch[0]);
-                    }
-                    throw new Error('AI返回格式错误');
-                }
-            } catch (error) {
-                if (timeoutId) clearTimeout(timeoutId);
-                console.error('=== 请求错误 ===');
-                console.error('错误名称:', error.name);
-                console.error('错误消息:', error.message);
-                console.error('错误对象:', error);
-                console.log('当前页面协议:', window.location.protocol);
-                console.log('API地址协议:', new URL(API_ENDPOINT).protocol);
-                console.log('混合内容问题:', window.location.protocol === 'https:' && new URL(API_ENDPOINT).protocol === 'http:');
-                console.log('=================');
-
-                if (error.name === 'AbortError') {
-                    throw new Error('请求超时，请检查网络或稍后重试。');
-                }
-                if (error.name === 'TypeError' || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-                    if (window.location.protocol === 'file:') {
-                        throw new Error(
-                            '❌ 无法连接：浏览器安全策略阻止了跨域请求\n\n' +
-                            '⚠️ 原因：直接打开本地HTML文件（file://协议）会被浏览器阻止跨域请求\n\n' +
-                            '✅ 解决方法：在本地启动HTTP服务器后访问\n\n' +
-                            'Windows/Mac终端命令：\n' +
-                            'cd 你的HTML文件目录\n' +
-                            'python -m http.server 8000\n\n' +
-                            '然后在浏览器访问：\n' +
-                            'http://localhost:8000/'
-                        );
-                    }
-                    let errorMsg = '无法连接AI接口';
-                    if (window.location.protocol === 'https:' && new URL(API_ENDPOINT).protocol === 'http:') {
-                        errorMsg += '\n\n⚠ 混合内容错误：HTTPS页面不能访问HTTP接口，请确保API地址使用HTTPS';
-                    }
-                    throw new Error(
-                        `${errorMsg}，请检查：\n` +
-                        `1. 网络是否正常\n` +
-                        `2. API地址和Key是否正确（点击⚙️进入配置页面）\n` +
-                        `3. API服务是否可用\n\n` +
-                        `提示：打开浏览器控制台（F12）查看详细错误信息`
-                    );
-                }
-                throw error;
-            }
-        }
+  return data;
+}
 
         // 获取演示结果（未配置API时使用）
         function getDemoResult(userMessage) {
