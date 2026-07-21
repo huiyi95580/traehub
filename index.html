@@ -6,10 +6,13 @@
     <title>AI申论老师 - 免费、透明、随练随改的AI批改老师</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
     <script>
-        // 配置PDF.js worker路径
+        // 配置PDF.js worker路径和cMap字体映射（支持中文）
         if (typeof pdfjsLib !== 'undefined') {
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            pdfjsLib.GlobalWorkerOptions.cMapUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/';
+            pdfjsLib.GlobalWorkerOptions.cMapPacked = true;
         }
     </script>
     <style>
@@ -727,16 +730,17 @@
 
            【如何替换为自己的API Key】
 
-           1. 找到下方 API_KEY 变量，将 "YOUR_API_KEY" 替换为您的实际API密钥
-           2. DeepSeek API Key 获取地址: https://platform.deepseek.com/
-           3. 混元API Key 获取地址: https://hunyuan.pro.tencent.com/
+           1. 找到下方 DEFAULT_CONFIG 变量，修改 apiKey
+           2. 或点击页面右上角⚙️进入配置页面修改
+           3. 修改后保存到浏览器本地存储
 
            【如何修改API端点地址】
 
-           找到下方 API_ENDPOINT 变量，根据您使用的AI服务修改地址：
+           在配置页面修改API接口地址，支持OpenAI兼容格式：
 
+           - 腾讯混元: https://tokenhub.tencentmaas.com/v1/chat/completions
            - DeepSeek: https://api.deepseek.com/v1/chat/completions
-           - 混元: https://hunyuan.pro.tencent.com/...
+           - 其他兼容API均可
 
            【如何扩展更多示例题目】
 
@@ -763,7 +767,12 @@
             const saved = localStorage.getItem('shenlun_config');
             if (saved) {
                 try {
-                    return JSON.parse(saved);
+                    const parsed = JSON.parse(saved);
+                    // 兼容性检查：如果是旧格式（只有apiBase），使用默认配置
+                    if (parsed.apiBase && !parsed.apiEndpoint) {
+                        return DEFAULT_CONFIG;
+                    }
+                    return parsed;
                 } catch (e) {
                     return DEFAULT_CONFIG;
                 }
@@ -969,7 +978,7 @@
                 }
 
                 if (!text || text.trim().length < 10) {
-                    throw new Error('文件内容为空或无法提取文本');
+                    throw new Error('文件内容为空或无法提取文本。如果是扫描件PDF，请确保网络畅通以加载OCR识别库。');
                 }
 
                 lastExtractedText = text;
@@ -1029,14 +1038,33 @@
                 throw new Error('PDF解析库未加载，请检查网络连接');
             }
 
+            // 保存文件对象和页数，以便OCR时重新读取
+            let pdfNumPages = 0;
             const arrayBuffer = await file.arrayBuffer();
-            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            // 创建ArrayBuffer副本，避免PDF.js处理时detach原始buffer
+            const arrayBufferCopy = arrayBuffer.slice(0);
+
+            const loadingTask = pdfjsLib.getDocument({
+                data: arrayBuffer,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                cMapPacked: true
+            });
             const pdf = await loadingTask.promise;
+            pdfNumPages = pdf.numPages;
+
+            console.log(`PDF文件共${pdfNumPages}页`);
 
             let fullText = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
+            for (let i = 1; i <= pdfNumPages; i++) {
+                console.log(`正在提取第${i}页文本...`);
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
+
+                console.log(`第${i}页包含${textContent.items.length}个文本块`);
+
+                if (textContent.items.length === 0) {
+                    console.log(`第${i}页没有文本内容，可能是扫描件`);
+                }
 
                 const items = textContent.items.map(item => ({
                     str: item.str,
@@ -1045,7 +1073,7 @@
                 }));
 
                 items.sort((a, b) => {
-                    if (Math.abs(a.y - b.y) < 2) {
+                    if (Math.abs(a.y - b.y) < 3) {
                         return a.x - b.x;
                     }
                     return b.y - a.y;
@@ -1054,17 +1082,185 @@
                 let pageText = '';
                 let lastY = null;
                 for (const item of items) {
-                    if (lastY !== null && Math.abs(item.y - lastY) > 5) {
+                    if (lastY !== null && Math.abs(item.y - lastY) > 6) {
                         pageText += '\n';
                     }
-                    pageText += item.str + ' ';
+                    pageText += item.str;
                     lastY = item.y;
                 }
 
                 fullText += pageText + '\n\n';
+                console.log(`第${i}页提取文本长度: ${pageText.length}字符`);
+            }
+
+            console.log(`PDF总提取文本长度: ${fullText.length}字符`);
+
+            // 检测文本质量，如果是乱码则切换到OCR识别
+            if (fullText.trim().length >= 10 && isTextReadable(fullText)) {
+                return fullText;
+            }
+
+            if (fullText.trim().length >= 10) {
+                console.log('PDF文本提取成功但内容为乱码，尝试OCR识别...');
+            } else {
+                console.log('PDF文本提取失败，尝试OCR识别...');
+            }
+            // 使用副本的ArrayBuffer进行OCR，避免detached问题
+            return await parsePDFWithOCR(arrayBufferCopy, pdfNumPages);
+        }
+
+        // 使用OCR解析PDF（扫描件）
+        async function parsePDFWithOCR(arrayBuffer, numPages) {
+            if (typeof Tesseract === 'undefined') {
+                throw new Error('OCR库未加载，请检查网络连接');
+            }
+
+            console.log(`开始OCR识别，共${numPages}页`);
+
+            const loadingTask = pdfjsLib.getDocument({ 
+                data: arrayBuffer,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                cMapPacked: true
+            });
+            const pdf = await loadingTask.promise;
+
+            let fullText = '';
+            let worker = null;
+
+            try {
+                worker = await Tesseract.createWorker(['chi_sim', 'eng'], 1, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            console.log(`OCR进度: ${Math.round(m.progress * 100)}%`);
+                        } else if (m.status === 'loading tesseract core') {
+                            console.log('正在加载OCR核心引擎...');
+                            showLoadingText('正在加载OCR核心引擎...');
+                        } else if (m.status === 'loading language traineddata') {
+                            console.log('正在加载中文识别模型...');
+                            showLoadingText('正在加载中文识别模型，请稍候...');
+                        } else if (m.status === 'initializing tesseract') {
+                            console.log('正在初始化OCR引擎...');
+                            showLoadingText('正在初始化OCR引擎...');
+                        }
+                    }
+                });
+
+                await worker.setParameters({
+                    tessedit_pageseg_mode: '6',
+                    preserve_interword_spaces: '1',
+                    tessedit_ocr_engine_mode: '2',
+                    textord_heavy_nr: '1',
+                    textord_min_linesize: '2.5'
+                });
+
+                for (let i = 1; i <= numPages; i++) {
+                    console.log(`正在识别第${i}/${numPages}页...`);
+                    showLoadingText(`正在识别第${i}/${numPages}页，请稍候...`);
+
+                    const page = await pdf.getPage(i);
+                    const scale = 3;
+                    const viewport = page.getViewport({ scale: scale });
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+
+                    await page.render({
+                        canvasContext: ctx,
+                        viewport: viewport
+                    }).promise;
+
+                    // 图像预处理：增强对比度和清晰度
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    for (let j = 0; j < data.length; j += 4) {
+                        const gray = data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114;
+                        let contrast = gray;
+                        if (gray < 128) {
+                            contrast = gray * 0.8;
+                        } else {
+                            contrast = 255 - (255 - gray) * 0.8;
+                        }
+                        contrast = Math.max(0, Math.min(255, contrast));
+                        data[j] = contrast;
+                        data[j + 1] = contrast;
+                        data[j + 2] = contrast;
+                    }
+                    ctx.putImageData(imageData, 0, 0);
+
+                    const result = await worker.recognize(canvas);
+                    const pageText = result.data.text;
+                    console.log(`第${i}页OCR识别文本长度: ${pageText.length}字符`);
+                    fullText += pageText + '\n\n';
+                }
+
+                console.log(`OCR识别完成，总文本长度: ${fullText.length}字符`);
+            } catch (ocrError) {
+                console.error('OCR识别失败:', ocrError);
+                throw new Error(`OCR识别失败: ${ocrError.message}。请确保网络畅通以加载OCR识别库。`);
+            } finally {
+                if (worker) {
+                    try {
+                        await worker.terminate();
+                    } catch (e) {
+                        console.warn('关闭OCR worker失败:', e);
+                    }
+                }
             }
 
             return fullText;
+        }
+
+        // 检测文本质量，判断是否为乱码
+        function isTextReadable(text) {
+            if (!text || text.trim().length < 10) {
+                return false;
+            }
+
+            const cleanText = text.replace(/\s/g, '');
+            const totalChars = cleanText.length;
+            if (totalChars < 10) {
+                return false;
+            }
+
+            // 正常可读字符范围
+            const readablePattern = /[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffefA-Za-z0-9，。！？；：、""''（）【】《》—…￥%&*+-=<>@#$.,!?;:'"()\[\]{}]/g;
+            const readableChars = (cleanText.match(readablePattern) || []).length;
+            const readableRatio = readableChars / totalChars;
+
+            // 中文字符统计
+            const chinesePattern = /[\u4e00-\u9fa5]/g;
+            const chineseChars = (cleanText.match(chinesePattern) || []).length;
+            const chineseRatio = chineseChars / totalChars;
+
+            // 乱码特征检测：Unicode私有使用区、代理对、控制字符等
+            const garbledPattern = /[\ue000-\uf8ff\uf000-\ufffd\u0000-\u001f\u007f-\u009f]/g;
+            const garbledChars = (cleanText.match(garbledPattern) || []).length;
+            const garbledRatio = garbledChars / totalChars;
+
+            console.log(`文本质量检测: 总字符=${totalChars}, 可读字符=${readableChars}, 可读比例=${(readableRatio*100).toFixed(1)}%, 中文比例=${(chineseRatio*100).toFixed(1)}%, 乱码字符=${garbledChars}, 乱码比例=${(garbledRatio*100).toFixed(1)}%`);
+
+            // 判断标准：
+            // 1. 可读字符比例低于60%，认为是乱码
+            // 2. 乱码字符比例超过20%，认为是乱码
+            // 3. 如果有中文字符且比例合理，认为是可读的
+            if (garbledRatio > 0.2) {
+                console.log('检测结果: 乱码字符比例过高，判定为乱码');
+                return false;
+            }
+
+            if (chineseRatio > 0.3 && readableRatio > 0.5) {
+                console.log('检测结果: 中文比例合理，文本可读');
+                return true;
+            }
+
+            if (readableRatio >= 0.6) {
+                console.log('检测结果: 可读字符比例达标，文本可读');
+                return true;
+            }
+
+            console.log('检测结果: 文本质量不达标，判定为乱码');
+            return false;
         }
 
         // 解析DOCX文件
@@ -1677,52 +1873,121 @@ ${answer}`;
             }
         }
 
-        // 调用AI接口
+        // 调用AI接口（直连，使用text/plain绕过CORS预检）
         async function callAI(userMessage) {
             // 检查是否配置了API
-            if (API_KEY === "YOUR_API_KEY") {
-                // 演示模式：根据用户答案动态生成模拟批改结果
+            if (API_KEY === "YOUR_API_KEY" || !API_KEY) {
                 return getDemoResult(userMessage);
             }
 
-            const response = await fetch(API_ENDPOINT, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${API_KEY}`
-                },
-                body: JSON.stringify({
-                    model: MODEL_NAME,
-                    messages: [
-                        { role: 'system', content: SYSTEM_PROMPT },
-                        { role: 'user', content: userMessage }
-                    ],
-                    temperature: 0.7
-                })
-            });
+            console.log('=== AI请求调试信息 ===');
+            console.log('当前页面地址:', window.location.href);
+            console.log('API_ENDPOINT:', API_ENDPOINT);
+            console.log('MODEL_NAME:', MODEL_NAME);
+            console.log('API_KEY长度:', API_KEY ? API_KEY.length : 0);
+            console.log('请求体大小:', JSON.stringify({model: MODEL_NAME, messages: [{role: 'user', content: userMessage}]}).length, '字符');
+            console.log('========================');
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error?.message || `API请求失败 (${response.status})`);
-            }
+            let timeoutId;
 
-            const data = await response.json();
-            const content = data.choices?.[0]?.message?.content;
-
-            if (!content) {
-                throw new Error('AI未返回有效结果');
-            }
-
-            // 尝试解析JSON
             try {
-                return JSON.parse(content);
-            } catch {
-                // 如果不是标准JSON，尝试提取JSON部分
-                const jsonMatch = content.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    return JSON.parse(jsonMatch[0]);
+                const controller = new AbortController();
+                timeoutId = setTimeout(() => {
+                    controller.abort();
+                }, 120000);
+
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    credentials: 'omit',
+                    headers: {
+                        'Content-Type': 'text/plain',
+                        'Authorization': `Bearer ${API_KEY}`,
+                        'Accept': 'application/json',
+                        'Origin': window.location.origin
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_NAME,
+                        messages: [
+                            { role: 'system', content: SYSTEM_PROMPT },
+                            { role: 'user', content: userMessage }
+                        ],
+                        temperature: 0.7
+                    }),
+                    signal: controller.signal,
+                    referrerPolicy: 'no-referrer'
+                });
+
+                console.log('=== 响应信息 ===');
+                console.log('状态码:', response.status);
+                console.log('响应URL:', response.url);
+                console.log('响应头:', Object.fromEntries(response.headers));
+                console.log('================');
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `API请求失败 (${response.status})`);
                 }
-                throw new Error('AI返回格式错误');
+
+                const data = await response.json();
+                const content = data.choices?.[0]?.message?.content;
+
+                if (!content) {
+                    throw new Error('AI未返回有效结果');
+                }
+
+                try {
+                    return JSON.parse(content);
+                } catch {
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        return JSON.parse(jsonMatch[0]);
+                    }
+                    throw new Error('AI返回格式错误');
+                }
+            } catch (error) {
+                if (timeoutId) clearTimeout(timeoutId);
+                console.error('=== 请求错误 ===');
+                console.error('错误名称:', error.name);
+                console.error('错误消息:', error.message);
+                console.error('错误对象:', error);
+                console.log('当前页面协议:', window.location.protocol);
+                console.log('API地址协议:', new URL(API_ENDPOINT).protocol);
+                console.log('混合内容问题:', window.location.protocol === 'https:' && new URL(API_ENDPOINT).protocol === 'http:');
+                console.log('=================');
+
+                if (error.name === 'AbortError') {
+                    throw new Error('请求超时，请检查网络或稍后重试。');
+                }
+                if (error.name === 'TypeError' || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                    if (window.location.protocol === 'file:') {
+                        throw new Error(
+                            '❌ 无法连接：浏览器安全策略阻止了跨域请求\n\n' +
+                            '⚠️ 原因：直接打开本地HTML文件（file://协议）会被浏览器阻止跨域请求\n\n' +
+                            '✅ 解决方法：在本地启动HTTP服务器后访问\n\n' +
+                            'Windows/Mac终端命令：\n' +
+                            'cd 你的HTML文件目录\n' +
+                            'python -m http.server 8000\n\n' +
+                            '然后在浏览器访问：\n' +
+                            'http://localhost:8000/'
+                        );
+                    }
+                    let errorMsg = '无法连接AI接口';
+                    if (window.location.protocol === 'https:' && new URL(API_ENDPOINT).protocol === 'http:') {
+                        errorMsg += '\n\n⚠ 混合内容错误：HTTPS页面不能访问HTTP接口，请确保API地址使用HTTPS';
+                    }
+                    throw new Error(
+                        `${errorMsg}，请检查：\n` +
+                        `1. 网络是否正常\n` +
+                        `2. API地址和Key是否正确（点击⚙️进入配置页面）\n` +
+                        `3. API服务是否可用\n\n` +
+                        `提示：打开浏览器控制台（F12）查看详细错误信息`
+                    );
+                }
+                throw error;
             }
         }
 

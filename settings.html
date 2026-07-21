@@ -286,7 +286,7 @@
 
             <div class="form-group">
                 <label class="form-label">API 接口地址</label>
-                <input type="text" class="form-input" id="apiEndpoint" placeholder="https://api.example.com/v1/chat/completions">
+                <input type="text" class="form-input" id="apiEndpoint" placeholder="https://tokenhub.tencentmaas.com/v1/chat/completions">
                 <div class="form-hint">OpenAI 兼容格式的接口地址</div>
             </div>
 
@@ -301,8 +301,8 @@
 
             <div class="form-group">
                 <label class="form-label">模型名称</label>
-                <input type="text" class="form-input" id="modelName" placeholder="gpt-4o / claude-3-opus / qwen-plus 等">
-                <div class="form-hint">要使用的模型ID</div>
+                <input type="text" class="form-input" id="modelName" placeholder="hy3 / deepseek-chat 等">
+                <div class="form-hint">腾讯混元: hy3 | DeepSeek: deepseek-chat</div>
             </div>
 
             <div id="testStatus" class="test-status"></div>
@@ -322,6 +322,23 @@
             </div>
             <div class="btn-group" style="margin-top: 16px;">
                 <button class="btn btn-secondary" onclick="resetConfig()" style="flex: 1; justify-content: center;">🔄 恢复默认配置</button>
+                <button class="btn btn-danger" onclick="clearStorage()" style="flex: 1; justify-content: center;">🗑️ 清除缓存</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">部署说明</div>
+            <div style="line-height: 1.8; color: var(--text-secondary); font-size: 0.9rem;">
+                <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">Q: 如何部署到腾讯云 EdgeOne Pages？</strong></p>
+                <ol style="margin-left: 20px; margin-bottom: 16px;">
+                    <li>登录 <a href="https://console.cloud.tencent.com/edgeone" target="_blank" style="color: var(--primary-color);">腾讯云EdgeOne控制台</a></li>
+                    <li>创建站点，选择"Pages"类型</li>
+                    <li>上传 <code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;">index.html</code> 和 <code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;">settings.html</code></li>
+                    <li>或连接Git仓库自动部署</li>
+                </ol>
+                
+                <p style="margin-bottom: 8px;"><strong style="color: var(--text-primary);">Q: 测试连接报错怎么办？</strong></p>
+                <p>本项目使用 <code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;">text/plain</code> 方式绕过CORS预检，兼容腾讯混元等API。如仍失败，请检查API地址和Key是否正确。</p>
             </div>
         </div>
     </div>
@@ -339,7 +356,12 @@
             const saved = localStorage.getItem('shenlun_config');
             if (saved) {
                 try {
-                    return JSON.parse(saved);
+                    const parsed = JSON.parse(saved);
+                    // 兼容性检查：如果是旧格式（只有apiBase），使用默认配置
+                    if (parsed.apiBase && !parsed.apiEndpoint) {
+                        return DEFAULT_CONFIG;
+                    }
+                    return parsed;
                 } catch (e) {
                     return DEFAULT_CONFIG;
                 }
@@ -356,7 +378,6 @@
             document.getElementById('apiEndpoint').value = config.apiEndpoint || '';
             document.getElementById('apiKey').value = config.apiKey || '';
             document.getElementById('modelName').value = config.modelName || '';
-
             updateStatus(config);
         }
 
@@ -371,17 +392,12 @@
                 statusEl.innerHTML = '<span style="color: var(--warning-color);">⚠ 未配置</span>';
             }
 
-            endpointEl.textContent = config.apiEndpoint ? maskEndpoint(config.apiEndpoint) : '-';
-            modelEl.textContent = config.modelName || '-';
-        }
-
-        function maskEndpoint(url) {
             try {
-                const u = new URL(url);
-                return u.hostname;
+                endpointEl.textContent = config.apiEndpoint ? new URL(config.apiEndpoint).hostname : '-';
             } catch {
-                return url.substring(0, 30) + '...';
+                endpointEl.textContent = config.apiEndpoint ? config.apiEndpoint.substring(0, 30) + '...' : '-';
             }
+            modelEl.textContent = config.modelName || '-';
         }
 
         function saveConfig() {
@@ -405,7 +421,7 @@
             const config = { apiEndpoint, apiKey, modelName };
             saveToStorage(config);
             updateStatus(config);
-            showToast('配置保存成功！');
+            showToast('配置保存成功！刷新首页生效。');
         }
 
         function resetConfig() {
@@ -419,6 +435,17 @@
             }
         }
 
+        function clearStorage() {
+            if (confirm('确定要清除所有缓存吗？这将恢复到默认配置。')) {
+                localStorage.removeItem('shenlun_config');
+                document.getElementById('apiEndpoint').value = DEFAULT_CONFIG.apiEndpoint;
+                document.getElementById('apiKey').value = DEFAULT_CONFIG.apiKey;
+                document.getElementById('modelName').value = DEFAULT_CONFIG.modelName;
+                updateStatus(DEFAULT_CONFIG);
+                showToast('缓存已清除，已恢复默认配置');
+            }
+        }
+
         async function testConnection() {
             const apiEndpoint = document.getElementById('apiEndpoint').value.trim();
             const apiKey = document.getElementById('apiKey').value.trim();
@@ -429,26 +456,50 @@
                 return;
             }
 
+            console.log('=== 测试连接调试信息 ===');
+            console.log('页面地址:', window.location.href);
+            console.log('API_ENDPOINT:', apiEndpoint);
+            console.log('MODEL_NAME:', modelName);
+            console.log('API_KEY长度:', apiKey.length);
+            console.log('页面协议:', window.location.protocol);
+            console.log('API协议:', new URL(apiEndpoint).protocol);
+            console.log('========================');
+
             const statusEl = document.getElementById('testStatus');
             statusEl.className = 'test-status loading';
             statusEl.textContent = '⏳ 正在测试连接...';
 
+            let timeoutId;
+
             try {
+                const controller = new AbortController();
+                timeoutId = setTimeout(() => controller.abort(), 30000);
+
                 const response = await fetch(apiEndpoint, {
                     method: 'POST',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    credentials: 'omit',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'text/plain',
                         'Authorization': `Bearer ${apiKey}`
                     },
                     body: JSON.stringify({
                         model: modelName,
-                        messages: [
-                            { role: 'user', content: '你好' }
-                        ],
+                        messages: [{ role: 'user', content: '你好' }],
                         stream: false,
                         max_tokens: 10
-                    })
+                    }),
+                    signal: controller.signal,
+                    referrerPolicy: 'no-referrer'
                 });
+
+                console.log('=== 响应信息 ===');
+                console.log('状态码:', response.status);
+                console.log('响应头:', Object.fromEntries(response.headers));
+                console.log('================');
+
+                clearTimeout(timeoutId);
 
                 if (response.ok) {
                     const data = await response.json();
@@ -456,12 +507,33 @@
                     statusEl.textContent = `✓ 连接成功！模型返回：${data.choices?.[0]?.message?.content?.substring(0, 30) || 'OK'}`;
                 } else {
                     const errorText = await response.text();
+                    console.error('响应错误:', errorText);
                     statusEl.className = 'test-status error';
                     statusEl.textContent = `✗ 连接失败：${response.status} ${response.statusText}`;
                 }
             } catch (error) {
+                if (timeoutId) clearTimeout(timeoutId);
+                console.error('=== 请求错误 ===');
+                console.error('错误名称:', error.name);
+                console.error('错误消息:', error.message);
+                console.error('错误对象:', error);
+                console.log('=================');
+
+                let errorMsg = error.message;
+                if (error.name === 'AbortError') {
+                    errorMsg = '连接超时（30秒），请检查网络或API地址';
+                } else if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
+                    if (window.location.protocol === 'file:') {
+                        errorMsg = '❌ 无法连接：浏览器安全策略阻止了跨域请求\n\n⚠️ 原因：直接打开本地HTML文件（file://协议）会被浏览器阻止跨域请求\n\n✅ 解决方法：在本地启动HTTP服务器后访问\n\nWindows/Mac终端命令：\ncd 你的HTML文件目录\npython -m http.server 8000\n\n然后在浏览器访问：\nhttp://localhost:8000/';
+                    } else {
+                        errorMsg = '网络错误，请检查API地址是否正确';
+                        if (window.location.protocol === 'https:' && new URL(apiEndpoint).protocol === 'http:') {
+                            errorMsg += '\n⚠ 混合内容：HTTPS页面不能访问HTTP接口';
+                        }
+                    }
+                }
                 statusEl.className = 'test-status error';
-                statusEl.textContent = `✗ 连接失败：${error.message}`;
+                statusEl.textContent = `✗ ${errorMsg}`;
             }
         }
 
