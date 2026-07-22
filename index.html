@@ -421,11 +421,6 @@
             text-indent: 0;
         }
 
-        .standard-answer p:first-child {
-            font-weight: 600;
-            color: var(--primary-color);
-        }
-
         /* 最终得分展示 */
         .score-display {
             text-align: center;
@@ -759,7 +754,6 @@
         // 默认API配置
         const DEFAULT_CONFIG = {
             apiEndpoint: 'https://1304491980-egsq881jkj.ap-guangzhou.tencentscf.com',
-            apiKey: 'sk-bSYgXYhVwWDoPkesSpakp05wpZKHsFBjCGXpiWVxU40etYL0',
             modelName: 'hy3'
         };
 
@@ -782,7 +776,6 @@
 
         const CONFIG = loadConfig();
         const API_ENDPOINT = CONFIG.apiEndpoint;
-        const API_KEY = CONFIG.apiKey;
         const MODEL_NAME = CONFIG.modelName;
 
         // 系统提示词 - 严格按要求设置
@@ -813,7 +806,7 @@
 
 ### 3. 反馈内容
 *   **给出"标准答案参考"**：基于材料撰写一份完整的、符合题目要求的标准答案。**【关键约束】标准答案的总字数必须严格控制在题目字数要求范围内，不得超出任何字。例如题目要求不超过150字，则标准答案必须控制在150字以内。**
-*   **逐项对比评分**：将我的答案与"标准答案"中的核心要点对比，明确指出：
+*   **逐项对比评分**：将我的答案与"标准答案"中的核心要点逐条对比，明确指出：
     *   **得分点**：我答对了哪些要点，得几分。
     *   **失分点**：我遗漏了哪些要点，或有哪些明确的扣分原因。
 *   **最终得分**：计算并给出总分。
@@ -1195,6 +1188,7 @@
                 }
 
                 console.log(`OCR识别完成，总文本长度: ${fullText.length}字符`);
+                console.log('OCR文本前500字:', fullText.substring(0, 500));
             } catch (ocrError) {
                 console.error('OCR识别失败:', ocrError);
                 throw new Error(`OCR识别失败: ${ocrError.message}。请确保网络畅通以加载OCR识别库。`);
@@ -1278,10 +1272,45 @@
             var clean = text;
             clean = clean.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
             clean = clean.replace(/\u3000/g, ' ');
-            
+
+            // 过滤广告、微信账号、公众号等无关内容
+            // 微信公众号、账号相关
+            clean = clean.replace(/微信[公]?众号[：:]\s*[^\n]+/gi, '');
+            clean = clean.replace(/公众号[：:]\s*[^\n]+/gi, '');
+            clean = clean.replace(/微信[号账号]*[：:]\s*[a-zA-Z0-9_-]+/gi, '');
+            clean = clean.replace(/关注[：:]?\s*微信[^\n]+/gi, '');
+            clean = clean.replace(/扫码[^\n]*(关注|获取|领取)[^\n]*/gi, '');
+            clean = clean.replace(/添加[微信][^\n]+/gi, '');
+            clean = clean.replace(/搜索[：:]?\s*[a-zA-Z0-9_-]+\s*(关注|获取)/gi, '');
+            // 广告、推广内容
+            clean = clean.replace(/客服[电话热线]*[：:]\s*[^\n]+/gi, '');
+            clean = clean.replace(/咨询[电话热线]*[：:]\s*[^\n]+/gi, '');
+            clean = clean.replace(/官方网站[：:]\s*[^\n]+/gi, '');
+            clean = clean.replace(/广告[：:]?\s*[^\n]+/gi, '');
+            clean = clean.replace(/推广[：:]?\s*[^\n]+/gi, '');
+            // 二维码提示
+            clean = clean.replace(/二维码[^\n]*/gi, '');
+            clean = clean.replace(/扫一?扫[^\n]*/gi, '');
+            // 版权声明、免责声明等
+            clean = clean.replace(/仅供[学习参考]+[，,]?\s*禁止[^\n]+/gi, '');
+            clean = clean.replace(/资料来源[：:]\s*[^\n]+/gi, '');
+            // 增强：PDF广告水印（如"获取试卷更新，请关注公众号"）
+            clean = clean.replace(/获取.*更新.*关注[^\n]*/gi, '');
+            clean = clean.replace(/关注.*公众号[^\n]*/gi, '');
+            clean = clean.replace(/温馨提示[：:]?\s*[^\n]*更新于[^\n]+/gi, '');
+            clean = clean.replace(/温馨提示[：:]?\s*[^\n]+/gi, '');
+            clean = clean.replace(/订单.*免费[^\n]+/gi, '');
+            clean = clean.replace(/免费进[^\n]*群[^\n]*/gi, '');
+            clean = clean.replace(/免费更新[^\n]*/gi, '');
+            clean = clean.replace(/淘宝[^\n]*真题[^\n]*/gi, '');
+            clean = clean.replace(/杨柳[^\n]*/gi, ''); // "杨柳"等人名广告
+            clean = clean.replace(/[a-zA-Z0-9_-]+[^\n]*真题[^\n]*/gi, ''); // 含"真题"的广告
+            // 空行清理
+            clean = clean.replace(/\n{3,}/g, '\n\n');
+
             var chineseChar = '[\u4e00-\u9fa5]';
             var chinesePunct = '[\u3002\uff0c\uff01\uff1f\u3001\uff1b\uff1a\u201c\u201d\u2018\u2019\uff08\uff09\u300a\u300b\u3010\u3011]';
-            
+
             var prevLen;
             do {
                 prevLen = clean.length;
@@ -1291,12 +1320,12 @@
                 clean = clean.replace(new RegExp('([A-Za-z])\\s+(' + chineseChar + ')', 'g'), '$1$2');
                 clean = clean.replace(new RegExp('(' + chineseChar + ')\\s+([A-Za-z])', 'g'), '$1$2');
             } while (clean.length !== prevLen);
-            
+
             clean = clean.replace(/[ \t]+/g, ' ');
             clean = clean.replace(/\n{3,}/g, '\n\n');
             clean = clean.replace(/^[ \t]+/gm, '');
             clean = clean.replace(/[ \t]+$/gm, '');
-            
+
             return clean;
         }
 
@@ -1359,13 +1388,15 @@
                 materialsText = cleanText.substring(0, answerRequestIndex).trim();
                 questionsText = cleanText.substring(answerRequestIndex).trim();
             } else {
-                // 优先找明确的题目起始标记（高置信度）
+                // 优先找明确的题目起始标记（大层级编号：小题编号）
+                // OCR 错误格式：（二）》、《三)
                 const highConfidencePatterns = [
                     /【问题[一二三四五六七八九十百千万零两\d]+】/,
                     /【题目[一二三四五六七八九十百千万零两\d]+】/,
                     /【第[一二三四五六七八九十百千万零两\d]+题】/,
                     /第[一二三四五六七八九十百千万零两\d]+题/,
-                    /(^|\n)[一二三四五六七八九十]+[、\.．]/
+                    /(^|\n)[一二三四五六七八九十]+[、\.．]/,
+                    /(^|\n)[（(《][一二三四五六七八九十]+[)）》]/  // 兼容各种括号和OCR错误
                 ];
                 let earliestQuestionIdx = cleanText.length;
                 for (const pattern of highConfidencePatterns) {
@@ -1429,14 +1460,19 @@
 
             let processedText = preprocessQuestionsOnly(questionText);
 
+            // 大层级编号（小题分割点）：第X题、中文数字编号、中文括号编号
+            // 小层级编号（题目内部要求）：1.、（1）等，不作为分割点
+            // OCR 常见错误：书名号与括号混用，如 《三)、（二）》
             const patterns = [
                 { regex: /^第([一二三四五六七八九十百千万零两\d]+)题/gm },
                 { regex: /^【问题([一二三四五六七八九十百千万零两\d]+)】/gm },
                 { regex: /^【题目([一二三四五六七八九十百千万零两\d]+)】/gm },
                 { regex: /^【第([一二三四五六七八九十百千万零两\d]+)题】/gm },
-                { regex: /^\s*(\d+)[\.\、\．]/gm },
-                { regex: /^\s*[（(]([一二三四五六七八九十百千万零两\d]+)[)）]/gm },
-                { regex: /^\s*([一二三四五六七八九十百千万零两]+)[、\.]/gm }
+                { regex: /^\s*([一二三四五六七八九十百千万零两]+)[、\.]/gm },
+                // 中文括号：（一）（二）或 OCR 错误格式如 （二）》
+                { regex: /^\s*[（(]([一二三四五六七八九十百千万零两]+)[)）》]/gm },
+                // OCR 错误格式：《三)、《四)、《一）
+                { regex: /^\s*[《（(]([一二三四五六七八九十百千万零两]+)[)）》]/gm }
             ];
 
             const questionTypeKeywords = [
@@ -1463,6 +1499,9 @@
                 /^注意事项/i,
                 /^作答要求/i,
                 /^答题要求/i,
+                /作答要求/i,  // 兼容"三、作答要求"等格式
+                /答题要求/i,
+                /题目要求/i,
                 /.*参考答案.*$/i,
                 /.*答案解析.*$/i,
                 /.*参考解析.*$/i
@@ -1491,7 +1530,9 @@
                     } else if (label.startsWith('第') && label.endsWith('题')) {
                         priority = 2; // 次高优先级：第X题
                     } else if (/^[（(]/.test(label)) {
-                        priority = 0; // 最低优先级：(1)、（一）等，容易是要求里的编号
+                        priority = 0; // 最低优先级：（一）（二）等，需要保护不被"三、"等跳过
+                    } else if (/^[一二三四五六七八九十百千万零两]+[、\.]/.test(label)) {
+                        priority = 0; // 中文数字+顿号也设为最低，避免跳过括号编号
                     }
                     
                     allMatches.push({
@@ -1594,6 +1635,34 @@
                     continue;
                 }
 
+                // 检查题目是否过长（可能包含多个题目未正确分割）
+                // 只用大层级编号进行二次分割，小层级（1.、（1））不分割
+                if (questionText.length > 800) {
+                    // 支持：（二）、（二）》、第2题、二、、《三)、《四) 等 OCR 错误格式
+                    const extraQuestionMarkers = questionText.match(/第[一二三四五六七八九十\d]+题|[一二三四五六七八九十]+[、\.]|[\u300A\uFF08(《][一二三四五六七八九十]+[\u300B)\uFF09》]+/gm);
+                    if (extraQuestionMarkers && extraQuestionMarkers.length > 1) {
+                        // 在大层级编号处分割（修复：用 | 正确分隔各选项）
+                        const splitPattern = /\n(?=第[一二三四五六七八九十\d]+题|[一二三四五六七八九十]+[、\.]|[\u300A\uFF08(《][一二三四五六七八九十]+[\u300B)\uFF09》]+)/g;
+                        const subQuestions = questionText.split(splitPattern).filter(q => q.trim().length >= 10);
+                        if (subQuestions.length > 1) {
+                            // 将分割出的小题添加到结果中
+                            for (const subQ of subQuestions) {
+                                const trimmedSubQ = subQ.trim();
+                                if (trimmedSubQ.length >= 10 && questionKeywordRegex.test(trimmedSubQ)) {
+                                    const numMatch = trimmedSubQ.match(/^[（(《]?([一二三四五六七八九十百千万零两\d]+)[)）》\.\、]?\s*/);
+                                    const originalNum = numMatch ? numMatch[0].trim() : (questions.length + 1).toString();
+                                    questions.push({
+                                        id: (questions.length + 1).toString(),
+                                        originalNum: originalNum,
+                                        text: trimmedSubQ
+                                    });
+                                }
+                            }
+                            continue; // 跳过当前题目的常规处理
+                        }
+                    }
+                }
+
                 const lines = questionText.split('\n');
                 if (lines.length > 1) {
                     const firstLineOnlyNumber = /^[第（(\d一二三四五六七八九十百千万零两]+[\.、\．:：)）]?\s*$/.test(lines[0]);
@@ -1654,11 +1723,22 @@
             result = result.replace(/【题目([一二三四五六七八九十百千万零两\d]+)】/g, '\n【题目$1】');
             result = result.replace(/【第([一二三四五六七八九十百千万零两\d]+)题】/g, '\n【第$1题】');
 
-            result = result.replace(/([\n。！？；：])第([一二三四五六七八九十百千万零两\d]+)题/g, '$1\n第$2题');
+            // 强制在"第X题"前换行（处理PDF解析后题目被合并的情况）
+            // 匹配：任意字符 + "第X题" → 换行 + "第X题"
+            result = result.replace(/([^\n])第([一二三四五六七八九十百千万零两\d]+)题/g, '$1\n第$2题');
             result = result.replace(/^第([一二三四五六七八九十百千万零两\d]+)题/gm, '\n第$1题');
-            result = result.replace(/([\n。！？；：])[（(](\d+)[)）]/g, '$1\n（$2）');
-            result = result.replace(/^[（(](\d+)[)）]/gm, '\n（$1）');
-            result = result.replace(/([\n。！？；：])([一二三四五六七八九十百千万零两]+)[、\.]/g, '$1\n$2、');
+
+            // 大层级编号：中文数字+顿号（一、二、三、）—— 小题编号
+            result = result.replace(/([^\n])([一二三四五六七八九十百千万零两]+)[、\.]([^一二三四五六七八九十])/g, '$1\n$2、$3');
+            result = result.replace(/^([一二三四五六七八九十百千万零两]+)[、\.]/gm, '\n$1、');
+
+            // 大层级编号：中文括号+中文数字（（一）（二））—— 小题编号
+            // 兼容 OCR 错误：（二）》或（二）》》
+            result = result.replace(/([^\n])[\uFF08(《]([一二三四五六七八九十]+)[)\uFF09》]+/g, '$1\n（$2）');
+            result = result.replace(/^[\uFF08(《]([一二三四五六七八九十]+)[)\uFF09》]+/gm, '\n（$1）');
+
+            // ⚠️ 小层级编号不强制换行（1.、（1）等是题目内部要求，不应分割小题）
+            // 因此不处理阿拉伯数字编号
 
             result = result.replace(/[ \t]+/g, ' ');
             result = result.replace(/\n{3,}/g, '\n\n');
@@ -1874,34 +1954,115 @@ ${answer}`;
         }
 
         // 调用AI接口（直连，使用text/plain绕过CORS预检）
-       async function callAI(payload) {
-         const res = await fetch(config.apiEndpoint, {
-     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
+        async function callAI(userMessage) {
+            console.log('=== AI请求调试信息 ===');
+            console.log('当前页面地址:', window.location.href);
+            console.log('API_ENDPOINT:', API_ENDPOINT);
+            console.log('MODEL_NAME:', MODEL_NAME);
+            console.log('请求体大小:', JSON.stringify({model: MODEL_NAME, messages: [{role: 'user', content: userMessage}]}).length, '字符');
+            console.log('========================');
 
-  if (!res.ok) {
-    throw new Error('API请求失败 (' + res.status + ')');
-  }
+            let timeoutId;
 
-  const wrapper = await res.json();
+            try {
+                const controller = new AbortController();
+                timeoutId = setTimeout(() => {
+                    controller.abort();
+                }, 120000);
 
-  // ✅ 关键修复：处理 SCF 函数 URL 默认响应模式的嵌套结构
-  let data;
-  if (wrapper.body && typeof wrapper.body === 'string') {
-    data = JSON.parse(wrapper.body);  // body 是字符串，需要再解析一次
-  } else {
-    data = wrapper;  // 已经是扁平结构就直接用
-  }
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    credentials: 'omit',
+                    headers: {
+                        'Content-Type': 'text/plain',
+                        'Accept': 'application/json',
+                        'Origin': window.location.origin
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_NAME,
+                        messages: [
+                            { role: 'system', content: SYSTEM_PROMPT },
+                            { role: 'user', content: userMessage }
+                        ],
+                        temperature: 0.7
+                    }),
+                    signal: controller.signal,
+                    referrerPolicy: 'no-referrer'
+                });
 
-if (!data.choices || !data.choices[0]) {
-    console.log('[DEBUG] 实际返回数据:', JSON.stringify(data));
-    throw new Error('AI未返回有效结果，实际数据: ' + JSON.stringify(data).slice(0, 500));
-  }
+                console.log('=== 响应信息 ===');
+                console.log('状态码:', response.status);
+                console.log('响应URL:', response.url);
+                console.log('响应头:', Object.fromEntries(response.headers));
+                console.log('================');
 
-  return data;
-}
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `API请求失败 (${response.status})`);
+                }
+
+                const data = await response.json();
+                const content = data.choices?.[0]?.message?.content;
+
+                if (!content) {
+                    throw new Error('AI未返回有效结果');
+                }
+
+                try {
+                    return JSON.parse(content);
+                } catch {
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        return JSON.parse(jsonMatch[0]);
+                    }
+                    throw new Error('AI返回格式错误');
+                }
+            } catch (error) {
+                if (timeoutId) clearTimeout(timeoutId);
+                console.error('=== 请求错误 ===');
+                console.error('错误名称:', error.name);
+                console.error('错误消息:', error.message);
+                console.error('错误对象:', error);
+                console.log('当前页面协议:', window.location.protocol);
+                console.log('API地址协议:', (() => { try { return new URL(API_ENDPOINT).protocol; } catch { return 'relative'; } })());
+                console.log('混合内容问题:', (() => { try { return window.location.protocol === 'https:' && new URL(API_ENDPOINT).protocol === 'http:'; } catch { return false; } })());
+                console.log('=================');
+
+                if (error.name === 'AbortError') {
+                    throw new Error('请求超时，请检查网络或稍后重试。');
+                }
+                if (error.name === 'TypeError' || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                    if (window.location.protocol === 'file:') {
+                        throw new Error(
+                            '❌ 无法连接：浏览器安全策略阻止了跨域请求\n\n' +
+                            '⚠️ 原因：直接打开本地HTML文件（file://协议）会被浏览器阻止跨域请求\n\n' +
+                            '✅ 解决方法：在本地启动HTTP服务器后访问\n\n' +
+                            'Windows/Mac终端命令：\n' +
+                            'cd 你的HTML文件目录\n' +
+                            'python -m http.server 8000\n\n' +
+                            '然后在浏览器访问：\n' +
+                            'http://localhost:8000/'
+                        );
+                    }
+                    let errorMsg = '无法连接AI接口';
+                    if (window.location.protocol === 'https:' && (() => { try { return new URL(API_ENDPOINT).protocol === 'http:'; } catch { return false; } })()) {
+                        errorMsg += '\n\n⚠ 混合内容错误：HTTPS页面不能访问HTTP接口，请确保API地址使用HTTPS';
+                    }
+                    throw new Error(
+                        `${errorMsg}，请检查：\n` +
+                        `1. 网络是否正常\n` +
+                        `2. API地址和Key是否正确（点击⚙️进入配置页面）\n` +
+                        `3. API服务是否可用\n\n` +
+                        `提示：打开浏览器控制台（F12）查看详细错误信息`
+                    );
+                }
+                throw error;
+            }
+        }
 
         // 获取演示结果（未配置API时使用）
         function getDemoResult(userMessage) {
@@ -2170,31 +2331,49 @@ if (!data.choices || !data.choices[0]) {
         }
 
         // 校验分数一致性
+        // 原则：以得分点累加分为最终得分；AI 返回的 final_score 仅作为参考，不信任它。
         function validateScoreConsistency(result, maxScore) {
             const scoreDetail = result.score_points_detail || [];
             const lossDetail = result.loss_points_detail || [];
-            
-            const scoreMatch = result.final_score ? result.final_score.match(/(\d+)/) : null;
-            let finalScore = scoreMatch ? parseInt(scoreMatch[1]) : 0;
 
+            // 累计算得分：支持 "得X分"、"X分"、": X分"、"X 分" 等写法
             let totalScore = 0;
             scoreDetail.forEach(item => {
-                const match = item.match(/得(\d+)分/);
-                if (match) totalScore += parseInt(match[1]);
+                const matches = item.match(/(\d+)\s*分/g);
+                if (matches) {
+                    matches.forEach(m => {
+                        const n = parseInt(m);
+                        if (!isNaN(n) && n <= maxScore) totalScore += n;
+                    });
+                }
             });
 
+            // 累计失分：支持 "扣X分"、"减X分"、"X分" 等写法
             let totalDeduct = 0;
             lossDetail.forEach(item => {
-                const match = item.match(/扣(\d+)分/);
-                if (match) totalDeduct += parseInt(match[1]);
+                const matches = item.match(/(\d+)\s*分/g);
+                if (matches) {
+                    matches.forEach(m => {
+                        const n = parseInt(m);
+                        if (!isNaN(n) && n <= maxScore) totalDeduct += n;
+                    });
+                }
             });
 
-            const expectedFinal = maxScore - totalDeduct;
-            if (expectedFinal !== finalScore) {
-                finalScore = expectedFinal;
-                result.final_score = `${Math.max(0, Math.min(maxScore, finalScore))}/${maxScore}`;
+            // 最终得分优先按得分点累加；
+            // 如果得分点为空但有失分点，则按满分 - 失分计算；
+            // 否则保持满分（即无得分点也无失分点时信任 AI 的返回）。
+            let finalScore;
+            if (totalScore > 0) {
+                finalScore = Math.min(maxScore, totalScore);
+            } else if (totalDeduct > 0) {
+                finalScore = Math.max(0, maxScore - totalDeduct);
+            } else {
+                const scoreMatch = result.final_score ? result.final_score.match(/(\d+)/) : null;
+                finalScore = scoreMatch ? parseInt(scoreMatch[1]) : maxScore;
             }
 
+            result.final_score = `${Math.max(0, Math.min(maxScore, finalScore))}/${maxScore}`;
             return result;
         }
 
