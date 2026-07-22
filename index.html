@@ -80,22 +80,6 @@
             position: relative;
         }
 
-        .settings-link {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            color: white;
-            font-size: 1.5rem;
-            text-decoration: none;
-            opacity: 0.8;
-            transition: opacity 0.2s, transform 0.2s;
-        }
-
-        .settings-link:hover {
-            opacity: 1;
-            transform: rotate(30deg);
-        }
-
         .header h1 {
             font-size: 2.5rem;
             font-weight: 700;
@@ -553,12 +537,126 @@
         .materials-content {
             transition: max-height 0.3s ease, margin-top 0.3s ease;
         }
+
+        /* 调试面板 */
+        .debug-section {
+            margin-top: 24px;
+            border: 1px dashed #94a3b8;
+            border-radius: 8px;
+            background: #f8fafc;
+        }
+        .debug-section .debug-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #64748b;
+            user-select: none;
+        }
+        .debug-section .debug-toggle:hover {
+            color: #475569;
+        }
+        .debug-section .debug-content {
+            display: none;
+            padding: 0 16px 16px;
+        }
+        .debug-section.expanded .debug-content {
+            display: block;
+        }
+        .debug-section .debug-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            margin: 12px 0 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .debug-section pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .debug-section .question-debug-item {
+            margin-bottom: 16px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+        .debug-section .question-debug-item .q-num {
+            font-weight: 600;
+            color: #0f766e;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        .debug-section .question-debug-item pre {
+            max-height: 200px;
+            margin: 0;
+        }
+
+        /* 历史记录 */
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            cursor: pointer;
+        }
+        .history-item:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            transform: translateX(2px);
+        }
+        .history-item-main {
+            flex: 1;
+            min-width: 0;
+        }
+        .history-item-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+        .history-item-meta {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .history-item-delete {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 1rem;
+            opacity: 0.5;
+            transition: opacity 0.2s, background 0.2s;
+        }
+        .history-item-delete:hover {
+            opacity: 1;
+            background: #fee2e2;
+        }
     </style>
 </head>
 <body>
     <!-- 标题区域 -->
     <header class="header">
-        <a href="settings.html" class="settings-link" title="AI配置">⚙️</a>
         <h1>AI申论老师</h1>
         <p>免费、透明、随练随改的AI批改老师</p>
     </header>
@@ -577,6 +675,9 @@
                     </button>
                     <button class="btn btn-primary" onclick="loadSampleQuestion()">
                         📝 使用示例题目
+                    </button>
+                    <button class="btn btn-secondary" id="historyBtn" onclick="toggleHistoryPanel()" style="display: none;">
+                        📜 历史记录
                     </button>
                 </div>
                 <input type="file" id="fileInput" class="hidden-input" accept=".pdf,.docx" onchange="handleFileUpload(this.files[0])">
@@ -614,6 +715,20 @@
                         ✕ 关闭
                     </button>
                 </div>
+            </div>
+        </section>
+
+        <!-- 历史记录面板 -->
+        <section class="card" id="historySection" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h2 class="card-title" style="margin-bottom: 0;">📜 最近识别记录</h2>
+                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;" onclick="toggleHistoryPanel()">
+                    ✕ 关闭
+                </button>
+            </div>
+            <p style="color: var(--text-light); font-size: 0.85rem; margin-bottom: 12px;">保留最近 10 个识别过的真题，点击即可快速切换</p>
+            <div id="historyList" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- 历史记录条目动态填充 -->
             </div>
         </section>
 
@@ -708,6 +823,27 @@
                 </div>
             </div>
         </section>
+
+        <!-- 调试面板：OCR 原始文本与题目分割详情 -->
+        <section class="debug-section" id="debugSection" style="display: none;">
+            <div class="debug-toggle" onclick="toggleDebugSection()">
+                <span>🔧 OCR 识别调试信息（点击展开）</span>
+                <span id="debugToggleIcon">▶</span>
+            </div>
+            <div class="debug-content" id="debugContent">
+                <div class="debug-label">清理后的完整文本（前 2000 字）</div>
+                <pre id="debugFullText"></pre>
+
+                <div class="debug-label">材料部分</div>
+                <pre id="debugMaterials"></pre>
+
+                <div class="debug-label">题目部分（原始分割结果）</div>
+                <div id="debugQuestions"></div>
+
+                <div class="debug-label">匹配过滤详情（用于排查识别问题）</div>
+                <pre id="debugMatchInfo"></pre>
+            </div>
+        </section>
     </main>
 
     <!-- 加载遮罩 -->
@@ -726,7 +862,7 @@
            【如何替换为自己的API Key】
 
            1. 找到下方 DEFAULT_CONFIG 变量，修改 apiKey
-           2. 或点击页面右上角⚙️进入配置页面修改
+           2. API地址和模型名称已预配置
            3. 修改后保存到浏览器本地存储
 
            【如何修改API端点地址】
@@ -918,6 +1054,7 @@
         let currentQuestions = null;
         let selectedQuestion = null;
         let lastExtractedText = '';
+        let lastDebugInfo = null; // 存储题目分割的调试信息
 
         // DOM元素
         const uploadArea = document.getElementById('uploadArea');
@@ -978,6 +1115,9 @@
 
                 const result = extractMaterialsAndQuestions(text);
 
+                // 填充调试面板
+                fillDebugPanel(result.cleanText, result.materials, result.questions);
+
                 // 显示材料区域
                 document.getElementById('materialsText').textContent = result.materials;
                 document.getElementById('materialsSection').style.display = 'block';
@@ -996,6 +1136,10 @@
                     title: file.name,
                     subQuestions: result.questions
                 };
+
+                // 保存到历史记录
+                saveToHistory(file.name, result.materials, result.questions);
+                renderHistoryList();
 
                 questionSection.style.display = 'block';
                 answerSection.style.display = 'block';
@@ -1273,6 +1417,21 @@
             clean = clean.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
             clean = clean.replace(/\u3000/g, ' ');
 
+            // OCR 常见错误纠正（必须在广告过滤和分割之前处理）
+            clean = clean.replace(/中论/g, '申论');
+            clean = clean.replace(/村料/g, '材料');
+            clean = clean.replace(/与作要求/g, '作答要求');
+            clean = clean.replace(/作管要求/g, '作答要求');
+            clean = clean.replace(/作名要求/g, '作答要求');
+            clean = clean.replace(/作答要习/g, '作答要求');
+            clean = clean.replace(/〈广西/g, '（广西');
+            clean = clean.replace(/广西A卷\)/g, '广西A卷）');
+            clean = clean.replace(/厂西/g, '广西');
+            // 短横线/破折号 → 一（OCR 常把（一）错识为(—)）
+            clean = clean.replace(/[\u2014\u2013\u2212\u2010]/g, '一');
+            clean = clean.replace(/谈恋/g, '谈谈');
+            clean = clean.replace(/晨变/g, '蝶变');
+
             // 过滤广告、微信账号、公众号等无关内容
             // 微信公众号、账号相关
             clean = clean.replace(/微信[公]?众号[：:]\s*[^\n]+/gi, '');
@@ -1305,6 +1464,12 @@
             clean = clean.replace(/淘宝[^\n]*真题[^\n]*/gi, '');
             clean = clean.replace(/杨柳[^\n]*/gi, ''); // "杨柳"等人名广告
             clean = clean.replace(/[a-zA-Z0-9_-]+[^\n]*真题[^\n]*/gi, ''); // 含"真题"的广告
+            // 扫描件乱码水印：纯大写/乱码英文、混合数字的无意义字符串
+            clean = clean.replace(/\b[A-Z]{5,}\b/g, '');
+            clean = clean.replace(/\b[A-Z0-9]{6,}\b/g, '');
+            clean = clean.replace(/[A-Za-z]{2,}[0-9]{2,}[A-Za-z0-9]*/g, '');
+            // 常见培训机构水印
+            clean = clean.replace(/(华图|中公|粉笔|腰果|导氮|杨柳|JIHERE|HERE)[^\n]*/gi, '');
             // 空行清理
             clean = clean.replace(/\n{3,}/g, '\n\n');
 
@@ -1356,6 +1521,26 @@
                 }
             }
 
+            // OCR 容错：允许"作答要求"中个别字被错识（如"作名要求""作管要求"）
+            if (bestIndex === -1) {
+                const fuzzyPatterns = [
+                    /(^|\n)[一二三四五六七八九十]+[、.．]?\s*作\s*[答名管名名名]\s*要\s*[求习见]/gm,
+                    /(^|\n)作\s*[答名管名名名]\s*要\s*[求习见]\s*$/gm,
+                    /(^|\n)作\s*[答名管名名名]\s*要\s*[求习见]\s*[：:]/gm,
+                    /(^|\n)[一二三四五六七八九十]+[、.．]?\s*答\s*题\s*要\s*[求习见]/gm,
+                    /(^|\n)[一二三四五六七八九十]+[、.．]?\s*题\s*目\s*要\s*[求习见]/gm
+                ];
+                for (const regex of fuzzyPatterns) {
+                    let match;
+                    while ((match = regex.exec(text)) !== null) {
+                        const idx = match.index + (match[1] ? match[1].length : 0);
+                        if (bestIndex === -1 || idx > bestIndex) {
+                            bestIndex = idx;
+                        }
+                    }
+                }
+            }
+
             if (bestIndex === -1) {
                 for (const marker of markers) {
                     const markerPat = buildMarkerPattern(marker);
@@ -1389,14 +1574,14 @@
                 questionsText = cleanText.substring(answerRequestIndex).trim();
             } else {
                 // 优先找明确的题目起始标记（大层级编号：小题编号）
-                // OCR 错误格式：（二）》、《三)
+                // OCR 错误格式：（二）》、《三)、《三)、《四)
                 const highConfidencePatterns = [
                     /【问题[一二三四五六七八九十百千万零两\d]+】/,
                     /【题目[一二三四五六七八九十百千万零两\d]+】/,
                     /【第[一二三四五六七八九十百千万零两\d]+题】/,
                     /第[一二三四五六七八九十百千万零两\d]+题/,
-                    /(^|\n)[一二三四五六七八九十]+[、\.．]/,
-                    /(^|\n)[（(《][一二三四五六七八九十]+[)）》]/  // 兼容各种括号和OCR错误
+                    /(^|\n)\s*[一二三四五六七八九十]+\s*[、\.．]\s*/,       // 一、 二．
+                    /(^|\n)\s*[（(〈《]\s*[一二三四五六七八九十]+\s*[)）〉》]\s*/  // 兼容各种括号和书名号OCR错误
                 ];
                 let earliestQuestionIdx = cleanText.length;
                 for (const pattern of highConfidencePatterns) {
@@ -1433,7 +1618,8 @@
             return {
                 materials: materialsText,
                 questions: questions,
-                hasAnswerRequest: answerRequestIndex !== -1
+                hasAnswerRequest: answerRequestIndex !== -1,
+                cleanText: cleanText
             };
         }
 
@@ -1462,17 +1648,21 @@
 
             // 大层级编号（小题分割点）：第X题、中文数字编号、中文括号编号
             // 小层级编号（题目内部要求）：1.、（1）等，不作为分割点
-            // OCR 常见错误：书名号与括号混用，如 《三)、（二）》
+            // OCR 常见错误：书名号与括号混用，如 《三)、（二）》；数字间混入空格
             const patterns = [
-                { regex: /^第([一二三四五六七八九十百千万零两\d]+)题/gm },
-                { regex: /^【问题([一二三四五六七八九十百千万零两\d]+)】/gm },
-                { regex: /^【题目([一二三四五六七八九十百千万零两\d]+)】/gm },
-                { regex: /^【第([一二三四五六七八九十百千万零两\d]+)题】/gm },
-                { regex: /^\s*([一二三四五六七八九十百千万零两]+)[、\.]/gm },
-                // 中文括号：（一）（二）或 OCR 错误格式如 （二）》
-                { regex: /^\s*[（(]([一二三四五六七八九十百千万零两]+)[)）》]/gm },
+                { regex: /^第\s*([一二三四五六七八九十百千万零两\d]+)\s*题/gm },
+                { regex: /^【问题\s*([一二三四五六七八九十百千万零两\d]+)\s*】/gm },
+                { regex: /^【题目\s*([一二三四五六七八九十百千万零两\d]+)\s*】/gm },
+                { regex: /^【第\s*([一二三四五六七八九十百千万零两\d]+)\s*题】/gm },
+                { regex: /^\s*([一二三四五六七八九十百千万零两]+)\s*[、\.．]\s*/gm },
+                // 中文括号：（一）（二）或 OCR 错误格式如 （二）》、(二)、( 二 ）
+                { regex: /^\s*[（(〈《]\s*([一二三四五六七八九十百千万零两]+)\s*[)）〉》]+\s*/gm },
                 // OCR 错误格式：《三)、《四)、《一）
-                { regex: /^\s*[《（(]([一二三四五六七八九十百千万零两]+)[)）》]/gm }
+                { regex: /^\s*[《〈]\s*([一二三四五六七八九十百千万零两]+)\s*[)）〉》]+\s*/gm },
+                // OCR 错误：缺少左括号，如一)、二）》
+                { regex: /^\s*([一二三四五六七八九十]+)\s*[)）〉》]+\s*/gm },
+                // OCR 错误：缺少右括号，如（一、(二
+                { regex: /^\s*[（(〈《]\s*([一二三四五六七八九十]+)(?![)）〉》])\s*/gm }
             ];
 
             const questionTypeKeywords = [
@@ -1481,7 +1671,7 @@
                 '讲话稿', '发言稿', '倡议书', '公开信', '汇报提纲', '提纲',
                 '调研报告', '调查提纲', '工作建议', '导学材料', '讲解稿', '短文', '短评',
                 '议论文', '策论文', '政论文', '文章', '作文', '写一篇', '撰写',
-                '指出', '简述', '总结', '梳理', '列出', '举措'
+                '指出', '简述', '总结', '梳理', '列出', '举措', '提出', '写'
             ];
 
             const requirementKeywords = [
@@ -1522,16 +1712,17 @@
             for (const pattern of patterns) {
                 let match;
                 while ((match = pattern.regex.exec(processedText)) !== null) {
-                    // 计算匹配类型的优先级
+                    // 计算匹配类型的优先级（label 可能带前导换行/空格，需 trim 后判断）
                     let priority = 1;
                     const label = match[0];
-                    if (label.startsWith('【问题') || label.startsWith('【题目') || label.startsWith('【第')) {
+                    const labelTrimmed = label.trim();
+                    if (labelTrimmed.startsWith('【问题') || labelTrimmed.startsWith('【题目') || labelTrimmed.startsWith('【第')) {
                         priority = 3; // 最高优先级：明确的题目标记
-                    } else if (label.startsWith('第') && label.endsWith('题')) {
+                    } else if (labelTrimmed.startsWith('第') && labelTrimmed.endsWith('题')) {
                         priority = 2; // 次高优先级：第X题
-                    } else if (/^[（(]/.test(label)) {
+                    } else if (/^[（(]/.test(labelTrimmed)) {
                         priority = 0; // 最低优先级：（一）（二）等，需要保护不被"三、"等跳过
-                    } else if (/^[一二三四五六七八九十百千万零两]+[、\.]/.test(label)) {
+                    } else if (/^[一二三四五六七八九十百千万零两]+[、\.]/.test(labelTrimmed)) {
                         priority = 0; // 中文数字+顿号也设为最低，避免跳过括号编号
                     }
                     
@@ -1547,20 +1738,38 @@
             allMatches.sort((a, b) => a.index - b.index);
 
             const uniqueMatches = [];
+            const usedIndices = new Set();
             for (const m of allMatches) {
-                const isDuplicate = uniqueMatches.some(um => {
-                    const distance = Math.abs(um.index - m.index);
-                    if (distance >= 15) return false;
-                    const sameType = um.label === m.label;
-                    const similarNum = um.num === m.num;
-                    return sameType || similarNum;
-                });
+                let isDuplicate = false;
+                
+                // 检查是否已经使用过这个位置附近的字符
+                for (let i = m.index; i < m.index + m.label.length; i++) {
+                    if (usedIndices.has(i)) {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+                
+                // 检查附近是否有相同编号的匹配
+                if (!isDuplicate) {
+                    isDuplicate = uniqueMatches.some(um => {
+                        const distance = Math.abs(um.index - m.index);
+                        if (distance >= 15) return false;
+                        return um.num === m.num;
+                    });
+                }
+                
                 if (!isDuplicate) {
                     uniqueMatches.push(m);
+                    // 标记这个位置的字符为已使用
+                    for (let i = m.index; i < m.index + m.label.length; i++) {
+                        usedIndices.add(i);
+                    }
                 }
             }
 
             const validMatches = [];
+            const filteredMatches = [];
             for (let i = 0; i < uniqueMatches.length; i++) {
                 const m = uniqueMatches[i];
                 const start = m.index;
@@ -1577,7 +1786,10 @@
                             break;
                         }
                     }
-                    if (hasHighPriorityNearby) continue;
+                    if (hasHighPriorityNearby) {
+                        filteredMatches.push({...m, reason: '附近有高优先级题目标记'});
+                        continue;
+                    }
                 }
                 
                 const textAfter = processedText.substr(start, Math.min(300, processedText.length - start));
@@ -1594,7 +1806,10 @@
                         break;
                     }
                 }
-                if (isNonQuestion) continue;
+                if (isNonQuestion) {
+                    filteredMatches.push({...m, reason: '匹配非题目模式（如作答要求/材料等）', firstLine: firstLine});
+                    continue;
+                }
 
                 const prevNewline = processedText.lastIndexOf('\n', start - 1);
                 const prevLineStart = prevNewline > 0 ? processedText.lastIndexOf('\n', prevNewline - 1) : 0;
@@ -1605,19 +1820,36 @@
                     const hasRequirementKeyword = requirementKeywordRegex.test(firstFewLines);
 
                     if (hasRequirementKeyword && !hasQuestionKeyword) {
+                        filteredMatches.push({...m, reason: '位于"要求"后且无题目关键词', firstFewLines: firstFewLines});
                         continue;
                     }
                     if (hasQuestionKeyword) {
                         validMatches.push(m);
                         continue;
                     }
+                    filteredMatches.push({...m, reason: '位于"要求"后'});
                     continue;
                 }
 
                 if (questionKeywordRegex.test(firstFewLines)) {
                     validMatches.push(m);
+                } else {
+                    filteredMatches.push({...m, reason: '无题目关键词（如概括/分析/写等）', firstFewLines: firstFewLines});
                 }
             }
+
+            // 保存调试信息
+            lastDebugInfo = {
+                processedTextPreview: processedText.substring(0, 800),
+                allMatchesCount: allMatches.length,
+                uniqueMatchesCount: uniqueMatches.length,
+                validMatchesCount: validMatches.length,
+                filteredMatchesCount: filteredMatches.length,
+                allMatches: allMatches.map(m => ({index: m.index, label: m.label.trim(), num: m.num, priority: m.priority})),
+                uniqueMatches: uniqueMatches.map(m => ({index: m.index, label: m.label.trim(), num: m.num, priority: m.priority})),
+                validMatches: validMatches.map(m => ({index: m.index, label: m.label.trim(), num: m.num, priority: m.priority})),
+                filteredMatches: filteredMatches.map(m => ({index: m.index, label: m.label.trim(), num: m.num, priority: m.priority, reason: m.reason, firstLine: m.firstLine, firstFewLines: m.firstFewLines}))
+            };
 
             for (let i = 0; i < validMatches.length; i++) {
                 const start = validMatches[i].index;
@@ -1638,23 +1870,24 @@
                 // 检查题目是否过长（可能包含多个题目未正确分割）
                 // 只用大层级编号进行二次分割，小层级（1.、（1））不分割
                 if (questionText.length > 800) {
-                    // 支持：（二）、（二）》、第2题、二、、《三)、《四) 等 OCR 错误格式
-                    const extraQuestionMarkers = questionText.match(/第[一二三四五六七八九十\d]+题|[一二三四五六七八九十]+[、\.]|[\u300A\uFF08(《][一二三四五六七八九十]+[\u300B)\uFF09》]+/gm);
+                    // 支持：第2题、二、（二）》、(二）、《三)、《四)、〈二〉 等 OCR 错误格式
+                    const extraQuestionMarkers = questionText.match(/第\s*[一二三四五六七八九十\d]+\s*题|[一二三四五六七八九十]+\s*[、\.．]|[\u300A\uFF08(〈《][一二三四五六七八九十]+[\u300B)\uFF09〉》]+/gm);
                     if (extraQuestionMarkers && extraQuestionMarkers.length > 1) {
-                        // 在大层级编号处分割（修复：用 | 正确分隔各选项）
-                        const splitPattern = /\n(?=第[一二三四五六七八九十\d]+题|[一二三四五六七八九十]+[、\.]|[\u300A\uFF08(《][一二三四五六七八九十]+[\u300B)\uFF09》]+)/g;
+                        // 在大层级编号处分割
+                        const splitPattern = /\n(?=第\s*[一二三四五六七八九十\d]+\s*题|[一二三四五六七八九十]+\s*[、\.．]|[\u300A\uFF08(〈《][一二三四五六七八九十]+[\u300B)\uFF09〉》]+)/g;
                         const subQuestions = questionText.split(splitPattern).filter(q => q.trim().length >= 10);
                         if (subQuestions.length > 1) {
                             // 将分割出的小题添加到结果中
                             for (const subQ of subQuestions) {
                                 const trimmedSubQ = subQ.trim();
                                 if (trimmedSubQ.length >= 10 && questionKeywordRegex.test(trimmedSubQ)) {
-                                    const numMatch = trimmedSubQ.match(/^[（(《]?([一二三四五六七八九十百千万零两\d]+)[)）》\.\、]?\s*/);
+                                    const numMatch = trimmedSubQ.match(/^[第]?[（(〈《]?([一二三四五六七八九十百千万零两\d]+)[)）〉》\.\、]?\s*/);
                                     const originalNum = numMatch ? numMatch[0].trim() : (questions.length + 1).toString();
+                                    const cleanSubQ = numMatch ? trimmedSubQ.substring(numMatch[0].length).trim() : trimmedSubQ;
                                     questions.push({
                                         id: (questions.length + 1).toString(),
                                         originalNum: originalNum,
-                                        text: trimmedSubQ
+                                        text: cleanSubQ
                                     });
                                 }
                             }
@@ -1665,7 +1898,7 @@
 
                 const lines = questionText.split('\n');
                 if (lines.length > 1) {
-                    const firstLineOnlyNumber = /^[第（(\d一二三四五六七八九十百千万零两]+[\.、\．:：)）]?\s*$/.test(lines[0]);
+                    const firstLineOnlyNumber = /^[第（(〈《\d一二三四五六七八九十百千万零两]+\s*[\.、\．:：)）〉》]?\s*$/.test(lines[0]);
                     if (firstLineOnlyNumber && lines[0].length < 20) {
                         lines.shift();
                         questionText = lines.join('\n').trim();
@@ -1680,7 +1913,9 @@
                                              /^-\s*\d+\s*-$/.test(lastLine);
                         // 试卷标题（不含问题关键词）
                         const isPaperTitle = lastLine.includes('《申论》') || 
-                                            (lastLine.includes('公务员') && lastLine.includes('真题') && !questionKeywordRegex.test(lastLine));
+                                            (lastLine.includes('公务员') && lastLine.includes('真题') && !questionKeywordRegex.test(lastLine)) ||
+                                            (/公务员.*申论.*[题卷]|申论.*[题卷].*公务员/.test(lastLine) && !questionKeywordRegex.test(lastLine)) ||
+                                            (/^\d{4}年.*公务员.*联考/.test(lastLine) && !questionKeywordRegex.test(lastLine));
                         // 空行
                         const isEmpty = lastLine.length === 0;
                         
@@ -1695,13 +1930,16 @@
 
                 if (questionText.length >= 10) {
                     // 提取题目原始编号（用于显示）
-                    const numMatch = questionText.match(/^[（(]?([一二三四五六七八九十百千万零两\d]+)[)）\.\、]?\s*/);
+                    const numMatch = questionText.match(/^[第]?[（(〈《]?([一二三四五六七八九十百千万零两\d]+)[)）〉》\.\、]?\s*/);
                     const originalNum = numMatch ? numMatch[0].trim() : (questions.length + 1).toString();
+                    
+                    // 从题目文本中移除编号部分，避免显示时重复
+                    const cleanText = numMatch ? questionText.substring(numMatch[0].length).trim() : questionText;
                     
                     questions.push({
                         id: (questions.length + 1).toString(),
                         originalNum: originalNum, // 保存原始编号用于显示
-                        text: questionText
+                        text: cleanText
                     });
                 }
             }
@@ -1729,13 +1967,22 @@
             result = result.replace(/^第([一二三四五六七八九十百千万零两\d]+)题/gm, '\n第$1题');
 
             // 大层级编号：中文数字+顿号（一、二、三、）—— 小题编号
-            result = result.replace(/([^\n])([一二三四五六七八九十百千万零两]+)[、\.]([^一二三四五六七八九十])/g, '$1\n$2、$3');
-            result = result.replace(/^([一二三四五六七八九十百千万零两]+)[、\.]/gm, '\n$1、');
+            // 兼容 OCR 在数字与标点间加空格，如 "一 、"
+            result = result.replace(/([^\n])([一二三四五六七八九十百千万零两]+)\s*[、\.．]\s*([^一二三四五六七八九十\d])/g, '$1\n$2、$3');
+            result = result.replace(/^([一二三四五六七八九十百千万零两]+)\s*[、\.．]\s*/gm, '\n$1、');
 
             // 大层级编号：中文括号+中文数字（（一）（二））—— 小题编号
-            // 兼容 OCR 错误：（二）》或（二）》》
-            result = result.replace(/([^\n])[\uFF08(《]([一二三四五六七八九十]+)[)\uFF09》]+/g, '$1\n（$2）');
-            result = result.replace(/^[\uFF08(《]([一二三四五六七八九十]+)[)\uFF09》]+/gm, '\n（$1）');
+            // 兼容 OCR 错误：（二）》、(二）、( 二 ）、〈二〉、《二》 等
+            result = result.replace(/([^\n])\s*[\uFF08(〈《]\s*([一二三四五六七八九十]+)\s*[)\uFF09〉》]+\s*/g, '$1\n（$2）');
+            result = result.replace(/^\s*[\uFF08(〈《]\s*([一二三四五六七八九十]+)\s*[)\uFF09〉》]+\s*/gm, '\n（$1）');
+
+            // 兼容 OCR 错误：缺少左括号，如一)、二）》
+            result = result.replace(/([^\n])\s*([一二三四五六七八九十]+)\s*[)\uFF09〉》]+\s*/g, '$1\n（$2）');
+            result = result.replace(/^([一二三四五六七八九十]+)\s*[)\uFF09〉》]+\s*/gm, '\n（$1）');
+
+            // 兼容 OCR 错误：缺少右括号，如（一根据、（二根据
+            result = result.replace(/([^\n])\s*[\uFF08(〈《]\s*([一二三四五六七八九十]+)(?![)\uFF09〉》])/g, '$1\n（$2）');
+            result = result.replace(/^[\uFF08(〈《]\s*([一二三四五六七八九十]+)(?![)\uFF09〉》])/gm, '\n（$1）');
 
             // ⚠️ 小层级编号不强制换行（1.、（1）等是题目内部要求，不应分割小题）
             // 因此不处理阿拉伯数字编号
@@ -2055,8 +2302,7 @@ ${answer}`;
                     throw new Error(
                         `${errorMsg}，请检查：\n` +
                         `1. 网络是否正常\n` +
-                        `2. API地址和Key是否正确（点击⚙️进入配置页面）\n` +
-                        `3. API服务是否可用\n\n` +
+                        `2. API服务是否可用\n\n` +
                         `提示：打开浏览器控制台（F12）查看详细错误信息`
                     );
                 }
@@ -2460,6 +2706,150 @@ ${answer}`;
             toggle.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
         }
 
+        // ==================== 历史记录功能 ====================
+        const HISTORY_KEY = 'shenlun_history';
+        const MAX_HISTORY = 10;
+
+        function saveToHistory(title, materials, questions) {
+            try {
+                let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+                // 去重：如果已有相同标题的记录，先删除
+                history = history.filter(h => h.title !== title);
+                // 添加到开头
+                history.unshift({
+                    title: title,
+                    materials: materials,
+                    questions: questions,
+                    timestamp: Date.now()
+                });
+                // 只保留最近 N 个
+                if (history.length > MAX_HISTORY) {
+                    history = history.slice(0, MAX_HISTORY);
+                }
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            } catch (e) {
+                console.error('保存历史记录失败:', e);
+            }
+        }
+
+        function getHistory() {
+            try {
+                return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function deleteHistoryItem(index) {
+            try {
+                let history = getHistory();
+                history.splice(index, 1);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+                renderHistoryList();
+                // 如果没有历史记录了，隐藏按钮
+                if (history.length === 0) {
+                    document.getElementById('historyBtn').style.display = 'none';
+                    document.getElementById('historySection').style.display = 'none';
+                }
+            } catch (e) {
+                console.error('删除历史记录失败:', e);
+            }
+        }
+
+        function loadFromHistory(index) {
+            const history = getHistory();
+            const item = history[index];
+            if (!item) return;
+
+            currentQuestions = {
+                title: item.title,
+                subQuestions: item.questions
+            };
+
+            // 恢复材料
+            if (item.materials) {
+                document.getElementById('materialsText').textContent = item.materials;
+                document.getElementById('materialsSection').style.display = 'block';
+                document.getElementById('materialsContent').classList.remove('collapsed');
+                document.getElementById('materialsToggle').textContent = '▼';
+            }
+
+            // 恢复题目
+            questionSection.style.display = 'block';
+            answerSection.style.display = 'block';
+            resultSection.classList.remove('visible');
+            hideRawTextArea();
+
+            populateQuestionSelect(item.questions.map((q, i) => ({
+                id: q.id,
+                label: `${q.originalNum} ${q.text.split('\n')[0].substring(0, 15)}...`
+            })));
+
+            // 自动选择第一题
+            if (item.questions.length > 0) {
+                questionSelect.value = item.questions[0].id;
+                displaySelectedQuestion();
+            }
+
+            showSuccess(`已加载历史记录：${item.title}`);
+            // 关闭历史面板
+            document.getElementById('historySection').style.display = 'none';
+
+            // 滚动到题目区域
+            questionSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderHistoryList() {
+            const history = getHistory();
+            const listEl = document.getElementById('historyList');
+            const btn = document.getElementById('historyBtn');
+
+            if (history.length === 0) {
+                btn.style.display = 'none';
+                listEl.innerHTML = '<p style="color: var(--text-light); text-align: center; padding: 20px;">暂无历史记录</p>';
+                return;
+            }
+
+            btn.style.display = 'inline-block';
+            listEl.innerHTML = '';
+
+            history.forEach((item, index) => {
+                const date = new Date(item.timestamp);
+                const dateStr = `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                const qCount = item.questions ? item.questions.length : 0;
+
+                const el = document.createElement('div');
+                el.className = 'history-item';
+                el.innerHTML = `
+                    <div class="history-item-main" onclick="loadFromHistory(${index})">
+                        <div class="history-item-title">${escapeHtml(item.title)}</div>
+                        <div class="history-item-meta">${dateStr} · 共 ${qCount} 道小题</div>
+                    </div>
+                    <button class="history-item-delete" onclick="event.stopPropagation(); deleteHistoryItem(${index})" title="删除此记录">🗑️</button>
+                `;
+                listEl.appendChild(el);
+            });
+        }
+
+        function toggleHistoryPanel() {
+            const section = document.getElementById('historySection');
+            if (section.style.display === 'none' || section.style.display === '') {
+                renderHistoryList();
+                section.style.display = 'block';
+                section.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                section.style.display = 'none';
+            }
+        }
+
+        // 页面加载时初始化历史记录按钮状态
+        document.addEventListener('DOMContentLoaded', function() {
+            const history = getHistory();
+            if (history.length > 0) {
+                document.getElementById('historyBtn').style.display = 'inline-block';
+            }
+        });
+
         // 解析手动粘贴的题目文本
         function parseManualText() {
             const text = document.getElementById('manualTextInput').value.trim();
@@ -2473,6 +2863,9 @@ ${answer}`;
 
             try {
                 const result = extractMaterialsAndQuestions(text);
+
+                // 填充调试面板
+                fillDebugPanel(result.cleanText, result.materials, result.questions);
 
                 // 显示材料区域
                 if (result.materials) {
@@ -2527,6 +2920,75 @@ ${answer}`;
             area.style.display = 'none';
         }
 
+        // 切换调试面板展开/收起
+        function toggleDebugSection() {
+            const section = document.getElementById('debugSection');
+            const icon = document.getElementById('debugToggleIcon');
+            section.classList.toggle('expanded');
+            icon.textContent = section.classList.contains('expanded') ? '▼' : '▶';
+        }
+
+        // 填充调试面板内容
+        function fillDebugPanel(fullText, materials, questions) {
+            const section = document.getElementById('debugSection');
+            const fullTextEl = document.getElementById('debugFullText');
+            const materialsEl = document.getElementById('debugMaterials');
+            const questionsEl = document.getElementById('debugQuestions');
+            const matchInfoEl = document.getElementById('debugMatchInfo');
+
+            section.style.display = 'block';
+            section.classList.remove('expanded');
+            document.getElementById('debugToggleIcon').textContent = '▶';
+
+            fullTextEl.textContent = fullText ? fullText.substring(0, 2000) : '(无)';
+            materialsEl.textContent = materials ? materials.substring(0, 2000) : '(无)';
+
+            questionsEl.innerHTML = '';
+            if (questions && questions.length > 0) {
+                questions.forEach((q, i) => {
+                    const item = document.createElement('div');
+                    item.className = 'question-debug-item';
+                    item.innerHTML = `<div class="q-num">题目 ${i + 1}（编号: ${q.originalNum || '无'}）</div><pre>${escapeHtml(q.text || '')}</pre>`;
+                    questionsEl.appendChild(item);
+                });
+            } else {
+                questionsEl.innerHTML = '<div style="color:#94a3b8;font-size:13px;">未识别到题目</div>';
+            }
+
+            // 显示匹配过滤详情
+            if (lastDebugInfo) {
+                let info = `预处理文本预览（前800字）:\n${lastDebugInfo.processedTextPreview}\n\n`;
+                info += `匹配统计: 全部=${lastDebugInfo.allMatchesCount}, 去重=${lastDebugInfo.uniqueMatchesCount}, 有效=${lastDebugInfo.validMatchesCount}, 过滤=${lastDebugInfo.filteredMatchesCount}\n\n`;
+                info += '=== 所有匹配 ===\n';
+                lastDebugInfo.allMatches.forEach(m => {
+                    info += `[${m.index}] ${m.label} (num=${m.num}, priority=${m.priority})\n`;
+                });
+                info += '\n=== 被过滤的匹配 ===\n';
+                if (lastDebugInfo.filteredMatches.length > 0) {
+                    lastDebugInfo.filteredMatches.forEach(m => {
+                        info += `[${m.index}] ${m.label} (num=${m.num}, priority=${m.priority}) → 原因: ${m.reason}\n`;
+                        if (m.firstLine) info += `    首行: ${m.firstLine.substring(0, 60)}\n`;
+                        if (m.firstFewLines) info += `    前三行: ${m.firstFewLines.substring(0, 80)}\n`;
+                    });
+                } else {
+                    info += '无\n';
+                }
+                info += '\n=== 有效匹配 ===\n';
+                lastDebugInfo.validMatches.forEach(m => {
+                    info += `[${m.index}] ${m.label} (num=${m.num}, priority=${m.priority})\n`;
+                });
+                matchInfoEl.textContent = info;
+            } else {
+                matchInfoEl.textContent = '暂无调试信息';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         // 从原始文本重新解析
         function reparseFromRawText() {
             const text = document.getElementById('rawTextDisplay').value.trim();
@@ -2540,6 +3002,9 @@ ${answer}`;
 
             try {
                 const result = extractMaterialsAndQuestions(text);
+
+                // 填充调试面板
+                fillDebugPanel(result.cleanText, result.materials, result.questions);
 
                 // 显示材料区域
                 if (result.materials) {
